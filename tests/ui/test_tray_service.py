@@ -483,3 +483,544 @@ class TestQuit:
         tray_service._quit()
 
         mock_bus.unregister_object.assert_called_with(123)
+
+
+# =============================================================================
+# TestSNIProtocol - D-Bus StatusNotifierItem property getters
+# =============================================================================
+
+
+class TestSNIProtocol:
+    """Tests for StatusNotifierItem D-Bus interface properties."""
+
+    def _get_prop(self, tray_service, prop_name):
+        """Helper to call _handle_get_property with standard args."""
+        return tray_service._handle_get_property(
+            None, "sender", "/StatusNotifierItem", "org.kde.StatusNotifierItem", prop_name
+        )
+
+    def test_get_property_category_returns_variant(self, tray_service):
+        """Test Category property returns a non-None result."""
+        result = self._get_prop(tray_service, "Category")
+        assert result is not None
+
+    def test_get_property_id_returns_variant(self, tray_service):
+        """Test Id property returns a non-None result."""
+        result = self._get_prop(tray_service, "Id")
+        assert result is not None
+
+    def test_get_property_title_returns_variant(self, tray_service):
+        """Test Title property returns a non-None result."""
+        result = self._get_prop(tray_service, "Title")
+        assert result is not None
+
+    def test_get_property_status_returns_variant(self, tray_service):
+        """Test Status property returns a non-None result for all statuses."""
+        for status in ["protected", "warning", "scanning", "threat"]:
+            tray_service._current_status = status
+            result = self._get_prop(tray_service, "Status")
+            assert result is not None
+
+    def test_get_property_icon_name_returns_variant(self, tray_service):
+        """Test IconName property returns a non-None result."""
+        tray_service._current_status = "warning"
+        result = self._get_prop(tray_service, "IconName")
+        assert result is not None
+
+    def test_get_property_window_id_returns_variant(self, tray_service):
+        """Test WindowId property returns a non-None result."""
+        result = self._get_prop(tray_service, "WindowId")
+        assert result is not None
+
+    def test_get_property_item_is_menu_returns_variant(self, tray_service):
+        """Test ItemIsMenu property returns a non-None result."""
+        result = self._get_prop(tray_service, "ItemIsMenu")
+        assert result is not None
+
+    def test_get_property_menu_returns_variant(self, tray_service):
+        """Test Menu property returns a non-None result."""
+        result = self._get_prop(tray_service, "Menu")
+        assert result is not None
+
+    def test_get_property_overlay_icon_name_returns_variant(self, tray_service):
+        """Test OverlayIconName property returns a non-None result."""
+        result = self._get_prop(tray_service, "OverlayIconName")
+        assert result is not None
+
+    def test_get_property_attention_icon_name_returns_variant(self, tray_service):
+        """Test AttentionIconName property returns a non-None result."""
+        result = self._get_prop(tray_service, "AttentionIconName")
+        assert result is not None
+
+    def test_get_property_tooltip_returns_variant(self, tray_service):
+        """Test ToolTip property returns a non-None result."""
+        result = self._get_prop(tray_service, "ToolTip")
+        assert result is not None
+
+    def test_get_property_icon_theme_path_returns_variant(self, tray_service):
+        """Test IconThemePath property returns a non-None result."""
+        result = self._get_prop(tray_service, "IconThemePath")
+        assert result is not None
+
+    def test_get_property_attention_movie_name_returns_variant(self, tray_service):
+        """Test AttentionMovieName property returns a non-None result."""
+        result = self._get_prop(tray_service, "AttentionMovieName")
+        assert result is not None
+
+    def test_get_property_unknown_returns_none(self, tray_service):
+        """Test unknown property returns None."""
+        result = tray_service._handle_get_property(
+            None,
+            "sender",
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "NonExistentProperty",
+        )
+
+        assert result is None
+
+    def test_register_with_watcher_calls_dbus(self, tray_service, mock_glib_gio):
+        """Test _register_with_watcher calls D-Bus RegisterStatusNotifierItem."""
+        mock_bus = mock.MagicMock()
+        tray_service._bus = mock_bus
+
+        tray_service._register_with_watcher()
+
+        mock_bus.call.assert_called_once()
+        call_args = mock_bus.call.call_args
+        # First arg is the watcher service name
+        assert "StatusNotifierWatcher" in call_args[0][0]
+        # Method name
+        assert call_args[0][3] == "RegisterStatusNotifierItem"
+
+    def test_register_with_watcher_noop_when_no_bus(self, tray_service):
+        """Test _register_with_watcher does nothing when no bus connection."""
+        tray_service._bus = None
+
+        # Should not raise
+        tray_service._register_with_watcher()
+
+
+# =============================================================================
+# TestMethodCalls - D-Bus method call handling
+# =============================================================================
+
+
+class TestMethodCalls:
+    """Tests for _handle_method_call D-Bus method dispatch."""
+
+    def test_activate_sends_toggle_window(self, tray_service):
+        """Test Activate method sends toggle_window action."""
+        tray_service._send_action = mock.MagicMock()
+        mock_invocation = mock.MagicMock()
+
+        tray_service._handle_method_call(
+            None,
+            "sender",
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "Activate",
+            mock.MagicMock(),
+            mock_invocation,
+        )
+
+        tray_service._send_action.assert_called_with("toggle_window")
+        mock_invocation.return_value.assert_called_with(None)
+
+    def test_context_menu_returns_value(self, tray_service):
+        """Test ContextMenu method returns value without sending action."""
+        tray_service._send_action = mock.MagicMock()
+        mock_invocation = mock.MagicMock()
+
+        tray_service._handle_method_call(
+            None,
+            "sender",
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "ContextMenu",
+            mock.MagicMock(),
+            mock_invocation,
+        )
+
+        # ContextMenu is handled by DBusMenu, not by sending an action
+        tray_service._send_action.assert_not_called()
+        mock_invocation.return_value.assert_called_with(None)
+
+    def test_secondary_activate_returns_value(self, tray_service):
+        """Test SecondaryActivate (middle click) returns value."""
+        mock_invocation = mock.MagicMock()
+
+        tray_service._handle_method_call(
+            None,
+            "sender",
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "SecondaryActivate",
+            mock.MagicMock(),
+            mock_invocation,
+        )
+
+        mock_invocation.return_value.assert_called_with(None)
+
+    def test_scroll_returns_value(self, tray_service):
+        """Test Scroll method returns value."""
+        mock_invocation = mock.MagicMock()
+        mock_params = mock.MagicMock()
+        mock_params.unpack.return_value = (10, "vertical")
+
+        tray_service._handle_method_call(
+            None,
+            "sender",
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "Scroll",
+            mock_params,
+            mock_invocation,
+        )
+
+        mock_invocation.return_value.assert_called_with(None)
+
+    def test_unknown_method_returns_error(self, tray_service):
+        """Test unknown method returns D-Bus error."""
+        mock_invocation = mock.MagicMock()
+
+        tray_service._handle_method_call(
+            None,
+            "sender",
+            "/StatusNotifierItem",
+            "org.kde.StatusNotifierItem",
+            "UnknownMethod",
+            mock.MagicMock(),
+            mock_invocation,
+        )
+
+        mock_invocation.return_dbus_error.assert_called_once()
+        error_args = mock_invocation.return_dbus_error.call_args[0]
+        assert "UnknownMethod" in error_args[0] or "UnknownMethod" in error_args[1]
+
+
+# =============================================================================
+# TestMenuHandling - menu item callbacks
+# =============================================================================
+
+
+class TestMenuHandling:
+    """Tests for menu item activation callbacks."""
+
+    def test_on_menu_toggle_window(self, tray_service):
+        """Test toggle window menu item sends toggle_window action."""
+        tray_service._send_action = mock.MagicMock()
+
+        tray_service._on_menu_toggle_window(mock.MagicMock(), 0)
+
+        tray_service._send_action.assert_called_with("toggle_window")
+
+    def test_on_menu_quick_scan(self, tray_service):
+        """Test quick scan menu item sends quick_scan action."""
+        tray_service._send_action = mock.MagicMock()
+
+        tray_service._on_menu_quick_scan(mock.MagicMock(), 0)
+
+        tray_service._send_action.assert_called_with("quick_scan")
+
+    def test_on_menu_full_scan(self, tray_service):
+        """Test full scan menu item sends full_scan action."""
+        tray_service._send_action = mock.MagicMock()
+
+        tray_service._on_menu_full_scan(mock.MagicMock(), 0)
+
+        tray_service._send_action.assert_called_with("full_scan")
+
+    def test_on_menu_update(self, tray_service):
+        """Test update menu item sends update action."""
+        tray_service._send_action = mock.MagicMock()
+
+        tray_service._on_menu_update(mock.MagicMock(), 0)
+
+        tray_service._send_action.assert_called_with("update")
+
+    def test_on_menu_quit(self, tray_service):
+        """Test quit menu item sends quit action."""
+        tray_service._send_action = mock.MagicMock()
+
+        tray_service._on_menu_quit(mock.MagicMock(), 0)
+
+        tray_service._send_action.assert_called_with("quit")
+
+
+# =============================================================================
+# TestStatusUpdates - handle_command for status/progress/icon changes
+# =============================================================================
+
+
+class TestStatusUpdates:
+    """Tests for status, progress, and icon update command handling."""
+
+    def test_handle_command_update_status_dispatches(self, tray_service):
+        """Test handle_command dispatches update_status with correct args."""
+        tray_service.update_status = mock.MagicMock()
+
+        with mock.patch(
+            "src.ui.tray_service.GLib.idle_add", side_effect=lambda fn, *args: fn(*args)
+        ):
+            tray_service.handle_command({"action": "update_status", "status": "threat"})
+
+        tray_service.update_status.assert_called_with("threat")
+
+    def test_handle_command_update_status_defaults_to_protected(self, tray_service):
+        """Test update_status defaults to 'protected' when status key missing."""
+        tray_service.update_status = mock.MagicMock()
+
+        with mock.patch(
+            "src.ui.tray_service.GLib.idle_add", side_effect=lambda fn, *args: fn(*args)
+        ):
+            tray_service.handle_command({"action": "update_status"})
+
+        tray_service.update_status.assert_called_with("protected")
+
+    def test_handle_command_update_progress_dispatches(self, tray_service):
+        """Test handle_command dispatches update_progress with percentage."""
+        tray_service.update_progress = mock.MagicMock()
+
+        with mock.patch(
+            "src.ui.tray_service.GLib.idle_add", side_effect=lambda fn, *args: fn(*args)
+        ):
+            tray_service.handle_command({"action": "update_progress", "percentage": 42})
+
+        tray_service.update_progress.assert_called_with(42)
+
+    def test_handle_command_update_progress_defaults_to_zero(self, tray_service):
+        """Test update_progress defaults to 0 when percentage missing."""
+        tray_service.update_progress = mock.MagicMock()
+
+        with mock.patch(
+            "src.ui.tray_service.GLib.idle_add", side_effect=lambda fn, *args: fn(*args)
+        ):
+            tray_service.handle_command({"action": "update_progress"})
+
+        tray_service.update_progress.assert_called_with(0)
+
+    def test_update_status_emits_new_status_signal(self, tray_service, mock_glib_gio):
+        """Test update_status emits NewStatus signal with SNI status string."""
+        tray_service._emit_signal = mock.MagicMock()
+
+        tray_service.update_status("threat")
+
+        # Should emit NewStatus with variant
+        new_status_calls = [
+            c for c in tray_service._emit_signal.call_args_list if c[0][0] == "NewStatus"
+        ]
+        assert len(new_status_calls) == 1
+
+    def test_emit_signal_uses_bus(self, tray_service, mock_glib_gio):
+        """Test _emit_signal sends signal via D-Bus connection."""
+        mock_bus = mock.MagicMock()
+        tray_service._bus = mock_bus
+
+        tray_service._emit_signal("NewIcon")
+
+        mock_bus.emit_signal.assert_called_once()
+        call_args = mock_bus.emit_signal.call_args[0]
+        assert call_args[2] == "org.kde.StatusNotifierItem"
+        assert call_args[3] == "NewIcon"
+
+    def test_emit_signal_noop_when_no_bus(self, tray_service):
+        """Test _emit_signal does nothing when bus is None."""
+        tray_service._bus = None
+
+        # Should not raise
+        tray_service._emit_signal("NewIcon")
+
+    def test_emit_signal_handles_exception(self, tray_service):
+        """Test _emit_signal catches exceptions."""
+        mock_bus = mock.MagicMock()
+        mock_bus.emit_signal.side_effect = RuntimeError("D-Bus error")
+        tray_service._bus = mock_bus
+
+        # Should not raise
+        tray_service._emit_signal("NewIcon")
+
+
+# =============================================================================
+# TestIPCProtocol - stdin/stdout JSON message handling
+# =============================================================================
+
+
+class TestIPCProtocol:
+    """Tests for IPC protocol (stdin reading, stdout writing)."""
+
+    def test_read_stdin_parses_json(self, tray_service):
+        """Test _read_stdin parses JSON lines and dispatches to handle_command."""
+        tray_service.handle_command = mock.MagicMock()
+        tray_service._quit = mock.MagicMock()
+
+        lines = ['{"action": "ping"}\n', '{"action": "update_status", "status": "scanning"}\n']
+
+        with mock.patch("src.ui.tray_service.GLib.idle_add"):
+            with mock.patch("sys.stdin", lines):
+                tray_service._read_stdin()
+
+        assert tray_service.handle_command.call_count == 2
+        tray_service.handle_command.assert_any_call({"action": "ping"})
+        tray_service.handle_command.assert_any_call(
+            {"action": "update_status", "status": "scanning"}
+        )
+
+    def test_read_stdin_skips_empty_lines(self, tray_service):
+        """Test _read_stdin skips empty lines."""
+        tray_service.handle_command = mock.MagicMock()
+        tray_service._quit = mock.MagicMock()
+
+        lines = ["\n", "   \n", '{"action": "ping"}\n']
+
+        with mock.patch("src.ui.tray_service.GLib.idle_add"):
+            with mock.patch("sys.stdin", lines):
+                tray_service._read_stdin()
+
+        assert tray_service.handle_command.call_count == 1
+
+    def test_read_stdin_handles_malformed_json(self, tray_service):
+        """Test _read_stdin handles invalid JSON without crashing."""
+        tray_service.handle_command = mock.MagicMock()
+        tray_service._quit = mock.MagicMock()
+
+        lines = ["not valid json\n", '{"action": "ping"}\n']
+
+        with mock.patch("src.ui.tray_service.GLib.idle_add"):
+            with mock.patch("sys.stdin", lines):
+                tray_service._read_stdin()
+
+        # Should still process the valid line
+        assert tray_service.handle_command.call_count == 1
+        tray_service.handle_command.assert_called_with({"action": "ping"})
+
+    def test_read_stdin_stops_when_not_running(self, tray_service):
+        """Test _read_stdin stops reading when _running is False."""
+        call_count = 0
+
+        def stop_after_first(cmd):
+            nonlocal call_count
+            call_count += 1
+            tray_service._running = False
+
+        tray_service.handle_command = mock.MagicMock(side_effect=stop_after_first)
+        tray_service._quit = mock.MagicMock()
+
+        lines = ['{"action": "ping"}\n', '{"action": "ping"}\n']
+
+        with mock.patch("src.ui.tray_service.GLib.idle_add"):
+            with mock.patch("sys.stdin", lines):
+                tray_service._read_stdin()
+
+        assert call_count == 1
+
+    def test_read_stdin_calls_quit_on_eof(self, tray_service):
+        """Test _read_stdin calls _quit via idle_add when stdin ends."""
+        tray_service.handle_command = mock.MagicMock()
+        mock_idle_add = mock.MagicMock()
+
+        with mock.patch("src.ui.tray_service.GLib.idle_add", mock_idle_add):
+            with mock.patch("sys.stdin", []):
+                tray_service._read_stdin()
+
+        # Should schedule _quit via idle_add in the finally block
+        mock_idle_add.assert_called_with(tray_service._quit)
+
+    def test_send_message_outputs_json_with_newline(self, tray_service, capsys):
+        """Test _send_message outputs valid JSON followed by newline."""
+        message = {"event": "ready"}
+
+        tray_service._send_message(message)
+
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out.strip())
+        assert parsed == message
+
+    def test_send_message_handles_exception(self, tray_service):
+        """Test _send_message catches exceptions from print."""
+        with mock.patch("builtins.print", side_effect=OSError("broken pipe")):
+            # Should not raise
+            tray_service._send_message({"event": "test"})
+
+    def test_send_action_sends_menu_action_event(self, tray_service):
+        """Test _send_action formats and sends menu_action event."""
+        tray_service._send_message = mock.MagicMock()
+
+        tray_service._send_action("quick_scan")
+
+        tray_service._send_message.assert_called_once_with(
+            {"event": "menu_action", "action": "quick_scan"}
+        )
+
+
+# =============================================================================
+# TestIconThemePath - custom icon theme path
+# =============================================================================
+
+
+class TestIconThemePath:
+    """Tests for icon theme path generation."""
+
+    def test_get_icon_theme_path_empty_when_no_custom_icons(self, tray_service):
+        """Test _get_icon_theme_path returns empty string without custom icons."""
+        tray_service._using_custom_icons = False
+
+        result = tray_service._get_icon_theme_path()
+
+        assert result == ""
+
+    def test_get_icon_theme_path_returns_parent_dir_with_custom_icons(
+        self, tray_service, mock_tray_icons
+    ):
+        """Test _get_icon_theme_path returns parent of cache dir with custom icons."""
+        mock_generator = mock.MagicMock()
+        tray_service._using_custom_icons = True
+        tray_service._icon_generator = mock_generator
+        mock_tray_icons.get_tray_icon_cache_dir.return_value = (
+            "/home/user/.local/share/icons/hicolor/22x22/apps"
+        )
+
+        # Need to patch the module-level function
+        with mock.patch(
+            "src.ui.tray_service.get_tray_icon_cache_dir",
+            return_value="/home/user/.local/share/icons/hicolor/22x22/apps",
+        ):
+            result = tray_service._get_icon_theme_path()
+
+        # Should return grandparent: /home/user/.local/share/icons/hicolor
+        assert result == "/home/user/.local/share/icons/hicolor"
+
+
+# =============================================================================
+# TestQuitExtended - extended quit behavior tests
+# =============================================================================
+
+
+class TestQuitExtended:
+    """Extended tests for quit behavior."""
+
+    def test_quit_releases_bus_name(self, tray_service):
+        """Test _quit releases the D-Bus bus name."""
+        tray_service._bus_name_id = 42
+
+        with mock.patch("src.ui.tray_service.Gio") as mock_gio:
+            tray_service._quit()
+            mock_gio.bus_unown_name.assert_called_with(42)
+
+    def test_quit_skips_bus_name_release_when_zero(self, tray_service):
+        """Test _quit skips bus name release when ID is 0."""
+        tray_service._bus_name_id = 0
+
+        with mock.patch("src.ui.tray_service.Gio") as mock_gio:
+            tray_service._quit()
+            mock_gio.bus_unown_name.assert_not_called()
+
+    def test_quit_skips_unregister_when_no_registration(self, tray_service):
+        """Test _quit skips unregister when sni_registration_id is 0."""
+        mock_bus = mock.MagicMock()
+        tray_service._bus = mock_bus
+        tray_service._sni_registration_id = 0
+
+        tray_service._quit()
+
+        mock_bus.unregister_object.assert_not_called()

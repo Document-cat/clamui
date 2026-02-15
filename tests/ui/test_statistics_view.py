@@ -933,3 +933,678 @@ def test_statistics_view_basic(statistics_view_class):
     assert view._get_data_points_for_timeframe("weekly") == 7
     assert view._get_data_points_for_timeframe("monthly") == 10
     assert view._get_data_points_for_timeframe("all") == 12
+
+
+class TestStatisticsViewErrorState:
+    """Tests for error state display."""
+
+    def test_show_error_state_sets_dashes(self, statistics_view_class):
+        """Test that error state sets all labels to dashes."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_error_state("Test error")
+
+        view._total_scans_label.set_label.assert_called_with("--")
+        view._files_scanned_label.set_label.assert_called_with("--")
+        view._threats_label.set_label.assert_called_with("--")
+        view._clean_scans_label.set_label.assert_called_with("--")
+        view._duration_label.set_label.assert_called_with("--")
+
+    def test_show_error_state_sets_error_badge(self, statistics_view_class):
+        """Test that error state sets 'Error' badge with error class."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_error_state("Test error")
+
+        view._status_badge.set_label.assert_called_with("Error")
+        view._status_badge.add_css_class.assert_called_with("error")
+
+    def test_show_error_state_sets_description(self, statistics_view_class):
+        """Test that error state uses the provided error message as description."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_error_state("Custom error message")
+
+        view._stats_group.set_description.assert_called_with("Custom error message")
+
+    def test_show_error_state_default_message(self, statistics_view_class):
+        """Test that error state uses default message when none provided."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_error_state()
+
+        # Default message should be set
+        view._stats_group.set_description.assert_called_once()
+        call_arg = view._stats_group.set_description.call_args[0][0]
+        assert "Unable to load statistics" in call_arg
+
+    def test_show_error_state_sets_error_icon(self, statistics_view_class):
+        """Test that error state shows the error icon."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_error_state()
+
+        view._protection_row_icon.set_from_icon_name.assert_called_once()
+        icon_arg = view._protection_row_icon.set_from_icon_name.call_args[0][0]
+        assert "error" in icon_arg
+
+    def test_show_error_state_removes_threat_styling(self, statistics_view_class):
+        """Test that error state removes error class from threats label."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_error_state()
+
+        view._threats_label.remove_css_class.assert_called_with("error")
+
+
+class TestStatisticsViewPerformLoad:
+    """Tests for the _perform_load method."""
+
+    def test_perform_load_with_valid_data(self, statistics_view_class):
+        """Test _perform_load updates UI when data is available."""
+        view = object.__new__(statistics_view_class)
+        view._calculator = mock.MagicMock()
+        view._current_timeframe = "weekly"
+
+        # Set up mock return values
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 5
+        view._calculator.get_statistics.return_value = mock_stats
+        view._calculator.get_protection_status.return_value = mock.MagicMock()
+        view._calculator.get_scan_trend_data.return_value = [
+            {"date": "2024-01-01", "scans": 1, "threats": 0}
+        ]
+
+        # Mock UI methods
+        view._update_statistics_display = mock.MagicMock()
+        view._update_protection_display = mock.MagicMock()
+        view._update_chart = mock.MagicMock()
+        view._set_loading_state = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+        view._show_error_state = mock.MagicMock()
+
+        result = view._perform_load()
+
+        assert result is False  # GLib.idle_add expects False to not repeat
+        view._update_statistics_display.assert_called_once()
+        view._update_protection_display.assert_called_once()
+        view._update_chart.assert_called_once()
+        view._set_loading_state.assert_called_with(False)
+
+    def test_perform_load_no_stats_shows_empty(self, statistics_view_class):
+        """Test _perform_load shows empty state when no scan history."""
+        view = object.__new__(statistics_view_class)
+        view._calculator = mock.MagicMock()
+        view._current_timeframe = "weekly"
+
+        # Return stats with zero scans
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 0
+        view._calculator.get_statistics.return_value = mock_stats
+        view._calculator.get_protection_status.return_value = mock.MagicMock()
+        view._calculator.get_scan_trend_data.return_value = []
+
+        view._update_statistics_display = mock.MagicMock()
+        view._update_protection_display = mock.MagicMock()
+        view._update_chart = mock.MagicMock()
+        view._set_loading_state = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+        view._show_error_state = mock.MagicMock()
+
+        view._perform_load()
+
+        view._show_empty_state.assert_called_once()
+        view._update_protection_display.assert_called_once()
+        view._update_chart.assert_called_with([])
+
+    def test_perform_load_complete_failure_shows_error(self, statistics_view_class):
+        """Test _perform_load shows error state when all loading fails."""
+        view = object.__new__(statistics_view_class)
+        view._calculator = mock.MagicMock()
+        view._current_timeframe = "weekly"
+
+        # Simulate complete failure
+        view._calculator.get_statistics.side_effect = Exception("DB error")
+        view._calculator.get_protection_status.side_effect = Exception("DB error")
+        view._calculator.get_scan_trend_data.side_effect = Exception("DB error")
+
+        view._update_statistics_display = mock.MagicMock()
+        view._update_protection_display = mock.MagicMock()
+        view._update_chart = mock.MagicMock()
+        view._set_loading_state = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+        view._show_error_state = mock.MagicMock()
+
+        view._perform_load()
+
+        view._show_error_state.assert_called_once()
+        view._update_chart.assert_called_with([])
+
+    def test_perform_load_always_resets_loading_state(self, statistics_view_class):
+        """Test _perform_load always resets loading state in finally block."""
+        view = object.__new__(statistics_view_class)
+        view._calculator = mock.MagicMock()
+        view._current_timeframe = "weekly"
+
+        # Simulate data loading succeeding but UI update raising
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 5
+        view._calculator.get_statistics.return_value = mock_stats
+        view._calculator.get_protection_status.return_value = mock.MagicMock()
+        view._calculator.get_scan_trend_data.return_value = []
+        view._update_statistics_display = mock.MagicMock(side_effect=Exception("UI error"))
+        view._update_protection_display = mock.MagicMock()
+        view._update_chart = mock.MagicMock()
+        view._set_loading_state = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+        view._show_error_state = mock.MagicMock()
+
+        view._perform_load()
+
+        # Loading state should ALWAYS be reset
+        view._set_loading_state.assert_called_with(False)
+
+    def test_perform_load_uses_correct_data_points(self, statistics_view_class):
+        """Test _perform_load passes correct data points count per timeframe."""
+        view = object.__new__(statistics_view_class)
+        view._calculator = mock.MagicMock()
+        view._current_timeframe = "daily"
+
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 5
+        view._calculator.get_statistics.return_value = mock_stats
+        view._calculator.get_protection_status.return_value = mock.MagicMock()
+        view._calculator.get_scan_trend_data.return_value = []
+
+        view._update_statistics_display = mock.MagicMock()
+        view._update_protection_display = mock.MagicMock()
+        view._update_chart = mock.MagicMock()
+        view._set_loading_state = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+        view._show_error_state = mock.MagicMock()
+
+        view._perform_load()
+
+        # Daily should use 6 data points
+        view._calculator.get_scan_trend_data.assert_called_once_with("daily", 6)
+
+
+class TestStatisticsViewLoadingStateTimeframeButtons:
+    """Tests for loading state interaction with timeframe buttons."""
+
+    def test_set_loading_true_disables_timeframe_buttons(self, statistics_view_class):
+        """Test that loading state disables all timeframe buttons."""
+        view = object.__new__(statistics_view_class)
+        view._is_loading = False
+        view._status_spinner = mock.MagicMock()
+        view._refresh_button = mock.MagicMock()
+        view._timeframe_buttons = {
+            "daily": mock.MagicMock(),
+            "weekly": mock.MagicMock(),
+            "monthly": mock.MagicMock(),
+            "all": mock.MagicMock(),
+        }
+
+        view._set_loading_state(True)
+
+        for button in view._timeframe_buttons.values():
+            button.set_sensitive.assert_called_with(False)
+
+    def test_set_loading_false_enables_timeframe_buttons(self, statistics_view_class):
+        """Test that ending loading state re-enables all timeframe buttons."""
+        view = object.__new__(statistics_view_class)
+        view._is_loading = True
+        view._status_spinner = mock.MagicMock()
+        view._refresh_button = mock.MagicMock()
+        view._timeframe_buttons = {
+            "daily": mock.MagicMock(),
+            "weekly": mock.MagicMock(),
+            "monthly": mock.MagicMock(),
+            "all": mock.MagicMock(),
+        }
+
+        view._set_loading_state(False)
+
+        for button in view._timeframe_buttons.values():
+            button.set_sensitive.assert_called_with(True)
+
+    def test_set_loading_exception_resets_flag(self, statistics_view_class):
+        """Test that loading state flag is reset even if widget ops fail."""
+        view = object.__new__(statistics_view_class)
+        view._is_loading = False
+        view._status_spinner = mock.MagicMock()
+        view._status_spinner.set_visible.side_effect = Exception("Widget error")
+        view._refresh_button = mock.MagicMock()
+        view._timeframe_buttons = {}
+
+        view._set_loading_state(True)
+
+        # Flag should be reset to False on exception
+        assert view._is_loading is False
+
+
+class TestStatisticsViewChartScroll:
+    """Tests for chart scroll event handling."""
+
+    def test_on_chart_scroll_returns_true(self, statistics_view_class):
+        """Test scroll handler returns True to stop event propagation."""
+        view = object.__new__(statistics_view_class)
+
+        # Mock canvas with no parent ScrolledWindow
+        view._canvas = mock.MagicMock()
+        view._canvas.get_parent.return_value = None
+
+        result = view._on_chart_scroll(mock.MagicMock(), 0, 1)
+
+        # Should still return True even without ScrolledWindow
+        assert result is True
+
+    def test_on_chart_scroll_with_scrolled_parent(self, statistics_view_class, mock_gi_modules):
+        """Test scroll handler adjusts vadjustment when parent is ScrolledWindow."""
+        # To make isinstance(widget, Gtk.ScrolledWindow) work with mocked GTK,
+        # we make Gtk.ScrolledWindow a real class and create an instance of it
+        gtk = mock_gi_modules["gtk"]
+
+        class FakeScrolledWindow:
+            pass
+
+        gtk.ScrolledWindow = FakeScrolledWindow
+
+        # Reimport to pick up the patched Gtk.ScrolledWindow
+        _clear_src_modules()
+        from src.ui.statistics_view import StatisticsView
+
+        view = object.__new__(StatisticsView)
+
+        mock_scrolled = FakeScrolledWindow()
+        mock_vadj = mock.MagicMock()
+        mock_vadj.get_value.return_value = 100
+        mock_vadj.get_lower.return_value = 0
+        mock_vadj.get_upper.return_value = 500
+        mock_vadj.get_page_size.return_value = 200
+        mock_scrolled.get_vadjustment = mock.MagicMock(return_value=mock_vadj)
+
+        view._canvas = mock.MagicMock()
+        view._canvas.get_parent.return_value = mock_scrolled
+
+        result = view._on_chart_scroll(mock.MagicMock(), 0, 1)
+
+        assert result is True
+        mock_vadj.set_value.assert_called_once()
+        # Scroll down: new_value = 100 + (1 * 50) = 150
+        new_val = mock_vadj.set_value.call_args[0][0]
+        assert new_val == 150
+
+        _clear_src_modules()
+
+
+class TestStatisticsViewEmptyStateContent:
+    """Tests for empty state content in _show_empty_state."""
+
+    def test_show_empty_state_clears_threat_styling(self, statistics_view_class):
+        """Test that empty state removes error class from threats label."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_empty_state()
+
+        view._threats_label.remove_css_class.assert_called_with("error")
+
+    def test_show_empty_state_clears_all_badge_classes(self, statistics_view_class):
+        """Test that empty state removes all status CSS classes from badge."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_empty_state()
+
+        # Should remove success, warning, and error classes
+        remove_calls = [c[0][0] for c in view._status_badge.remove_css_class.call_args_list]
+        assert "success" in remove_calls
+        assert "warning" in remove_calls
+        assert "error" in remove_calls
+
+    def test_show_empty_state_sets_info_icon(self, statistics_view_class):
+        """Test that empty state shows the information icon."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_empty_state()
+
+        icon_arg = view._protection_row_icon.set_from_icon_name.call_args[0][0]
+        assert "information" in icon_arg
+
+    def test_show_empty_state_sets_stats_group_description(self, statistics_view_class):
+        """Test that empty state updates the stats group description."""
+        view = object.__new__(statistics_view_class)
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+
+        view._show_empty_state()
+
+        view._stats_group.set_description.assert_called_once()
+        desc = view._stats_group.set_description.call_args[0][0]
+        assert "first scan" in desc.lower() or "statistics" in desc.lower()
+
+
+class TestStatisticsViewProtectionDisplayLastScan:
+    """Tests for last scan display in _update_protection_display."""
+
+    def test_last_scan_with_hours_age(self, statistics_view_class):
+        """Test last scan row displays hours-based age string."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "protected"
+        mock_status.message = "System is protected"
+        mock_status.last_scan_timestamp = "2024-01-15T10:30:00"
+        mock_status.last_scan_age_hours = 5.0
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        subtitle = view._last_scan_row.set_subtitle.call_args[0][0]
+        assert "2024-01-15" in subtitle
+        assert "hour" in subtitle
+
+    def test_last_scan_less_than_hour(self, statistics_view_class):
+        """Test last scan row displays 'less than an hour ago'."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "protected"
+        mock_status.message = "System is protected"
+        mock_status.last_scan_timestamp = "2024-01-15T10:30:00"
+        mock_status.last_scan_age_hours = 0.5
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        subtitle = view._last_scan_row.set_subtitle.call_args[0][0]
+        assert "less than" in subtitle or "hour" in subtitle
+
+    def test_last_scan_days_age(self, statistics_view_class):
+        """Test last scan row displays days-based age string."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "at_risk"
+        mock_status.message = "Last scan was days ago"
+        mock_status.last_scan_timestamp = "2024-01-10T10:30:00"
+        mock_status.last_scan_age_hours = 72.0  # 3 days
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        subtitle = view._last_scan_row.set_subtitle.call_args[0][0]
+        assert "day" in subtitle
+
+    def test_last_scan_weeks_age(self, statistics_view_class):
+        """Test last scan row displays weeks-based age string."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "unprotected"
+        mock_status.message = "Scan overdue"
+        mock_status.last_scan_timestamp = "2024-01-01T10:30:00"
+        mock_status.last_scan_age_hours = 336.0  # 2 weeks
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        subtitle = view._last_scan_row.set_subtitle.call_args[0][0]
+        assert "week" in subtitle
+
+    def test_last_scan_no_timestamp(self, statistics_view_class):
+        """Test last scan row shows 'No scans recorded' when no timestamp."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "unprotected"
+        mock_status.message = "No scans performed"
+        mock_status.last_scan_timestamp = None
+        mock_status.last_scan_age_hours = None
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        subtitle = view._last_scan_row.set_subtitle.call_args[0][0]
+        assert "No scans" in subtitle
+
+    def test_last_scan_no_age_hours(self, statistics_view_class):
+        """Test last scan row displays timestamp without age when age is None."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "protected"
+        mock_status.message = "Protected"
+        mock_status.last_scan_timestamp = "2024-01-15T10:30:00"
+        mock_status.last_scan_age_hours = None
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        subtitle = view._last_scan_row.set_subtitle.call_args[0][0]
+        assert "2024-01-15" in subtitle
+
+    def test_protection_display_unknown_level(self, statistics_view_class):
+        """Test protection display with an unknown level value."""
+        view = object.__new__(statistics_view_class)
+        mock_status = mock.MagicMock()
+        mock_status.level = "some_new_level"
+        mock_status.message = "Unknown state"
+        mock_status.last_scan_timestamp = None
+        mock_status.last_scan_age_hours = None
+
+        view._current_protection = mock_status
+        view._protection_row = mock.MagicMock()
+        view._protection_row_icon = mock.MagicMock()
+        view._status_badge = mock.MagicMock()
+        view._last_scan_row = mock.MagicMock()
+
+        view._update_protection_display()
+
+        view._status_badge.set_label.assert_called_with("Unknown")
+        icon_arg = view._protection_row_icon.set_from_icon_name.call_args[0][0]
+        assert "question" in icon_arg
+
+
+class TestStatisticsViewUpdateStatisticsDateRange:
+    """Tests for date range display in _update_statistics_display."""
+
+    def test_date_range_with_valid_dates(self, statistics_view_class):
+        """Test that valid date range is displayed in stats group description."""
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 10
+        mock_stats.files_scanned = 500
+        mock_stats.threats_detected = 0
+        mock_stats.clean_scans = 10
+        mock_stats.average_duration = 30.0
+        mock_stats.start_date = "2024-01-01T00:00:00"
+        mock_stats.end_date = "2024-01-31T23:59:59"
+
+        view = object.__new__(statistics_view_class)
+        view._current_stats = mock_stats
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+
+        view._update_statistics_display()
+
+        desc = view._stats_group.set_description.call_args[0][0]
+        assert "Jan" in desc
+        assert "2024" in desc
+
+    def test_date_range_with_no_dates(self, statistics_view_class):
+        """Test that 'all time' description is used when no date range."""
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 10
+        mock_stats.files_scanned = 500
+        mock_stats.threats_detected = 0
+        mock_stats.clean_scans = 10
+        mock_stats.average_duration = 30.0
+        mock_stats.start_date = None
+        mock_stats.end_date = None
+
+        view = object.__new__(statistics_view_class)
+        view._current_stats = mock_stats
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+
+        view._update_statistics_display()
+
+        desc = view._stats_group.set_description.call_args[0][0]
+        assert "all time" in desc.lower()
+
+    def test_positive_duration_formatted(self, statistics_view_class):
+        """Test that positive average duration is formatted and displayed."""
+        mock_stats = mock.MagicMock()
+        mock_stats.total_scans = 10
+        mock_stats.files_scanned = 500
+        mock_stats.threats_detected = 0
+        mock_stats.clean_scans = 10
+        mock_stats.average_duration = 120.0
+        mock_stats.start_date = None
+        mock_stats.end_date = None
+
+        view = object.__new__(statistics_view_class)
+        view._current_stats = mock_stats
+        view._total_scans_label = mock.MagicMock()
+        view._files_scanned_label = mock.MagicMock()
+        view._threats_label = mock.MagicMock()
+        view._clean_scans_label = mock.MagicMock()
+        view._duration_label = mock.MagicMock()
+        view._stats_group = mock.MagicMock()
+        view._show_empty_state = mock.MagicMock()
+
+        view._update_statistics_display()
+
+        duration_text = view._duration_label.set_label.call_args[0][0]
+        assert "m" in duration_text  # 120s = 2m 0s
