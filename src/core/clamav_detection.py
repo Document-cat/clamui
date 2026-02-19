@@ -9,6 +9,7 @@ This module provides functions for:
 - Testing clamd daemon connectivity
 """
 
+import logging
 import os
 import subprocess
 
@@ -20,6 +21,8 @@ from .flatpak import (
     wrap_host_command,
 )
 from .i18n import _
+
+logger = logging.getLogger(__name__)
 
 # Database file extensions that ClamAV uses
 _DATABASE_EXTENSIONS = {".cvd", ".cld", ".cud"}
@@ -325,3 +328,145 @@ def check_database_available() -> tuple[bool, str | None]:
         return (False, _("Error accessing database: {error}").format(error=e))
 
     return (False, _("No virus database files found. Please download the database first."))
+
+
+# --- Config file path detection ---
+
+_CLAMD_CONF_PATHS = [
+    "/etc/clamav/clamd.conf",  # Debian/Ubuntu
+    "/etc/clamd.d/scan.conf",  # Fedora/RHEL/CentOS/AlmaLinux/Rocky
+    "/etc/clamd.conf",  # Generic/older
+]
+
+_FRESHCLAM_CONF_PATHS = [
+    "/etc/clamav/freshclam.conf",  # Debian/Ubuntu
+    "/etc/freshclam.conf",  # Fedora/RHEL
+]
+
+
+def _config_file_exists(path: str) -> bool:
+    """
+    Check if a config file exists on the host filesystem.
+
+    In Flatpak, uses flatpak-spawn to check the host filesystem.
+    Natively, uses os.path.isfile().
+
+    Args:
+        path: Absolute path to the config file
+
+    Returns:
+        True if the file exists, False otherwise
+    """
+    if is_flatpak():
+        try:
+            result = subprocess.run(
+                ["flatpak-spawn", "--host", "test", "-f", path],
+                capture_output=True,
+                timeout=5,
+            )
+            return result.returncode == 0
+        except Exception as e:
+            logger.debug("Failed to check host file %s: %s", path, e)
+            return False
+    return os.path.isfile(path)
+
+
+def detect_clamd_conf_path() -> str | None:
+    """
+    Detect the clamd configuration file by probing known paths.
+
+    Checks common distribution-specific locations in priority order:
+    1. /etc/clamav/clamd.conf (Debian/Ubuntu)
+    2. /etc/clamd.d/scan.conf (Fedora/RHEL/CentOS)
+    3. /etc/clamd.conf (Generic/older)
+
+    Returns:
+        Path to the first existing config file, or None if not found
+    """
+    for path in _CLAMD_CONF_PATHS:
+        if _config_file_exists(path):
+            logger.info("Detected clamd config at: %s", path)
+            return path
+    logger.info("No clamd config file found in known locations")
+    return None
+
+
+def detect_freshclam_conf_path() -> str | None:
+    """
+    Detect the freshclam configuration file by probing known paths.
+
+    Checks common distribution-specific locations in priority order:
+    1. /etc/clamav/freshclam.conf (Debian/Ubuntu)
+    2. /etc/freshclam.conf (Fedora/RHEL)
+
+    Returns:
+        Path to the first existing config file, or None if not found
+    """
+    for path in _FRESHCLAM_CONF_PATHS:
+        if _config_file_exists(path):
+            logger.info("Detected freshclam config at: %s", path)
+            return path
+    logger.info("No freshclam config file found in known locations")
+    return None
+
+
+def resolve_clamd_conf_path(settings_manager=None) -> str | None:
+    """
+    Resolve the clamd config path: check saved setting, then auto-detect.
+
+    Resolution order:
+    1. Saved path from settings (if non-empty and file exists)
+    2. Auto-detect by probing known paths
+    3. None if nothing found
+
+    Persists newly detected paths to settings for future use.
+
+    Args:
+        settings_manager: Optional SettingsManager for reading/persisting paths
+
+    Returns:
+        Path to clamd.conf, or None if not found
+    """
+    if settings_manager:
+        saved = settings_manager.get("clamd_conf_path", "")
+        if saved and _config_file_exists(saved):
+            return saved
+        if saved:
+            logger.info("Saved clamd config path invalid (%s), re-detecting", saved)
+            settings_manager.set("clamd_conf_path", "")
+
+    detected = detect_clamd_conf_path()
+    if detected and settings_manager:
+        settings_manager.set("clamd_conf_path", detected)
+    return detected
+
+
+def resolve_freshclam_conf_path(settings_manager=None) -> str | None:
+    """
+    Resolve the freshclam config path: check saved setting, then auto-detect.
+
+    Resolution order:
+    1. Saved path from settings (if non-empty and file exists)
+    2. Auto-detect by probing known paths
+    3. None if nothing found
+
+    Persists newly detected paths to settings for future use.
+
+    Args:
+        settings_manager: Optional SettingsManager for reading/persisting paths
+
+    Returns:
+        Path to freshclam.conf, or None if not found
+    """
+    if settings_manager:
+        saved = settings_manager.get("freshclam_conf_path", "")
+        if saved and _config_file_exists(saved):
+            return saved
+        if saved:
+            logger.info("Saved freshclam config path invalid (%s), re-detecting", saved)
+            settings_manager.set("freshclam_conf_path", "")
+
+    detected = detect_freshclam_conf_path()
+    if detected and settings_manager:
+        settings_manager.set("freshclam_conf_path", detected)
+    return detected

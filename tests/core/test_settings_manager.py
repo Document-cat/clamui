@@ -467,6 +467,16 @@ class TestSettingsManagerDefaults:
         assert "close_behavior" in SettingsManager.DEFAULT_SETTINGS
         assert SettingsManager.DEFAULT_SETTINGS["close_behavior"] is None
 
+    def test_default_settings_has_clamd_conf_path(self):
+        """Test that DEFAULT_SETTINGS contains clamd_conf_path."""
+        assert "clamd_conf_path" in SettingsManager.DEFAULT_SETTINGS
+        assert SettingsManager.DEFAULT_SETTINGS["clamd_conf_path"] == ""
+
+    def test_default_settings_has_freshclam_conf_path(self):
+        """Test that DEFAULT_SETTINGS contains freshclam_conf_path."""
+        assert "freshclam_conf_path" in SettingsManager.DEFAULT_SETTINGS
+        assert SettingsManager.DEFAULT_SETTINGS["freshclam_conf_path"] == ""
+
     def test_default_settings_is_not_modified(self):
         """Test that DEFAULT_SETTINGS is not modified by operations."""
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -23,9 +23,13 @@ from .clamav_detection import (
     check_clamd_connection,
     check_clamdscan_installed,
     check_freshclam_installed,
+    detect_clamd_conf_path,
+    detect_freshclam_conf_path,
     get_clamav_path,
     get_clamd_socket_path,
     get_freshclam_path,
+    resolve_clamd_conf_path,
+    resolve_freshclam_conf_path,
 )
 from .clipboard import copy_to_clipboard
 from .flatpak import (
@@ -74,6 +78,10 @@ __all__ = [
     "check_clamd_connection",
     "get_clamav_path",
     "get_freshclam_path",
+    "detect_clamd_conf_path",
+    "detect_freshclam_conf_path",
+    "resolve_clamd_conf_path",
+    "resolve_freshclam_conf_path",
     # Path validation functions
     "check_symlink_safety",
     "validate_path",

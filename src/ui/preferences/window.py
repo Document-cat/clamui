@@ -17,6 +17,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 from ...core.clamav_config import parse_config
+from ...core.clamav_detection import resolve_clamd_conf_path, resolve_freshclam_conf_path
 from ...core.flatpak import (
     ensure_freshclam_config,
     get_freshclam_config_path,
@@ -191,15 +192,24 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
                     )
             else:
                 logger.warning(
-                    "Could not determine Flatpak config path, falling back to system path"
+                    "Could not determine Flatpak config path, falling back to auto-detect"
                 )
-                self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
-                self._freshclam_load_error = "Could not determine Flatpak configuration path"
+                detected = resolve_freshclam_conf_path(self._settings_manager)
+                self._freshclam_conf_path = detected or "/etc/clamav/freshclam.conf"
+                if not detected:
+                    self._freshclam_load_error = "Could not determine Flatpak configuration path"
             # clamd.conf is typically not used in Flatpak (daemon runs on host)
-            self._clamd_conf_path = "/etc/clamav/clamd.conf"
+            # but auto-detect the host path for config editing
+            self._clamd_conf_path = (
+                resolve_clamd_conf_path(self._settings_manager) or "/etc/clamav/clamd.conf"
+            )
         else:
-            self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
-            self._clamd_conf_path = "/etc/clamav/clamd.conf"
+            self._freshclam_conf_path = (
+                resolve_freshclam_conf_path(self._settings_manager) or "/etc/clamav/freshclam.conf"
+            )
+            self._clamd_conf_path = (
+                resolve_clamd_conf_path(self._settings_manager) or "/etc/clamav/clamd.conf"
+            )
 
         # Check if clamd.conf exists
         if Path(self._clamd_conf_path).exists():
@@ -395,7 +405,9 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
 
     def _create_database_page(self):
         """Create the Database Updates page (freshclam.conf)."""
-        page = DatabasePage.create_page(self._freshclam_conf_path, self._freshclam_widgets)
+        page = DatabasePage.create_page(
+            self._freshclam_conf_path, self._freshclam_widgets, parent_window=self
+        )
         self._add_page_to_stack("database", page)
         # Populate fields if config was already loaded
         if self._freshclam_config:

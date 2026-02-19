@@ -304,8 +304,8 @@ class SavePage(PreferencesPageMixin):
                     _("Configuration Error"),
                     _(
                         "Cannot save clamd settings: Configuration failed to load.\n\n"
-                        "Check that /etc/clamav/clamd.conf exists and is readable."
-                    ),
+                        "Check that {path} exists and is readable."
+                    ).format(path=self._clamd_conf_path),
                 )
                 self._is_saving = False
                 button.set_sensitive(True)

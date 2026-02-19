@@ -16,8 +16,15 @@ logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk
 
+# Check GTK version for FileDialog support (added in GTK 4.10)
+try:
+    _HAS_FILE_DIALOG = Gtk.get_minor_version() >= 10
+except (TypeError, AttributeError):
+    _HAS_FILE_DIALOG = False
+
+from ...core.clamav_detection import detect_clamd_conf_path
 from ...core.flatpak import is_flatpak
 from ...core.i18n import _
 from ..compat import create_entry_row, create_switch_row, create_toolbar_view
@@ -87,9 +94,34 @@ class ScannerPage(PreferencesPageMixin):
         # Create scan backend settings group (ClamUI settings, auto-saved)
         ScannerPage._create_scan_backend_group(page, widgets_dict, settings_manager, temp_instance)
 
-        # Create file location group
-        temp_instance._create_file_location_group(
-            page, _("Configuration File"), config_path, _("clamd.conf location")
+        # Create file location group with detect/browse callbacks
+        def _on_detect_clamd():
+            detected = detect_clamd_conf_path()
+            if detected:
+                path_row.set_subtitle(detected)
+                parent_window._clamd_conf_path = detected
+                parent_window._clamd_available = True
+                sm = getattr(parent_window, "_settings_manager", None)
+                if sm:
+                    sm.set("clamd_conf_path", detected)
+                toast = Adw.Toast.new(_("Detected: {path}").format(path=detected))
+                parent_window.add_toast(toast)
+            else:
+                toast = Adw.Toast.new(_("No clamd.conf found in known locations"))
+                parent_window.add_toast(toast)
+
+        def _on_browse_clamd():
+            ScannerPage._browse_for_config(
+                parent_window, path_row, "clamd_conf_path", "_clamd_conf_path"
+            )
+
+        path_row = temp_instance._create_file_location_group(
+            page,
+            _("Configuration File"),
+            config_path,
+            _("clamd.conf location"),
+            on_detect=_on_detect_clamd,
+            on_browse=_on_browse_clamd,
         )
 
         if clamd_available:
@@ -112,6 +144,73 @@ class ScannerPage(PreferencesPageMixin):
             page.add(group)
 
         return page
+
+    @staticmethod
+    def _browse_for_config(parent_window, path_row, settings_key, attr_name):
+        """
+        Open a file picker to browse for a .conf config file.
+
+        Uses Gtk.FileDialog on GTK 4.10+ with FileChooserNative fallback.
+
+        Args:
+            parent_window: The PreferencesWindow for transient parent and settings
+            path_row: The Adw.ActionRow to update the subtitle on
+            settings_key: Settings key to persist the selected path
+            attr_name: Attribute name on parent_window to update
+        """
+        conf_filter = Gtk.FileFilter()
+        conf_filter.set_name(_("Configuration files"))
+        conf_filter.add_pattern("*.conf")
+
+        def _apply_selection(file_path):
+            if file_path:
+                path_row.set_subtitle(file_path)
+                setattr(parent_window, attr_name, file_path)
+                if attr_name == "_clamd_conf_path":
+                    parent_window._clamd_available = True
+                sm = getattr(parent_window, "_settings_manager", None)
+                if sm:
+                    sm.set(settings_key, file_path)
+                toast = Adw.Toast.new(_("Selected: {path}").format(path=file_path))
+                parent_window.add_toast(toast)
+
+        if _HAS_FILE_DIALOG:
+            dialog = Gtk.FileDialog()
+            dialog.set_title(_("Select Configuration File"))
+            initial_folder = Gio.File.new_for_path("/etc")
+            dialog.set_initial_folder(initial_folder)
+            filters = Gio.ListStore.new(Gtk.FileFilter)
+            filters.append(conf_filter)
+            dialog.set_filters(filters)
+            dialog.set_default_filter(conf_filter)
+
+            def _on_open_finish(dlg, result):
+                try:
+                    gfile = dlg.open_finish(result)
+                    if gfile:
+                        _apply_selection(gfile.get_path())
+                except GLib.Error:
+                    pass  # User cancelled
+
+            dialog.open(parent_window, None, _on_open_finish)
+        else:
+            dialog = Gtk.FileChooserNative.new(
+                _("Select Configuration File"),
+                parent_window,
+                Gtk.FileChooserAction.OPEN,
+                _("_Select"),
+                _("_Cancel"),
+            )
+            dialog.add_filter(conf_filter)
+
+            def _on_response(dlg, response):
+                if response == Gtk.ResponseType.ACCEPT:
+                    gfile = dlg.get_file()
+                    if gfile:
+                        _apply_selection(gfile.get_path())
+
+            dialog.connect("response", _on_response)
+            dialog.show()
 
     @staticmethod
     def _create_scan_backend_group(

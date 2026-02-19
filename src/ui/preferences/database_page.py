@@ -15,8 +15,15 @@ logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk
 
+# Check GTK version for FileDialog support (added in GTK 4.10)
+try:
+    _HAS_FILE_DIALOG = Gtk.get_minor_version() >= 10
+except (TypeError, AttributeError):
+    _HAS_FILE_DIALOG = False
+
+from ...core.clamav_detection import detect_freshclam_conf_path
 from ...core.i18n import N_, _
 from ..compat import create_entry_row, create_switch_row
 from ..utils import resolve_icon_name
@@ -169,13 +176,16 @@ class DatabasePage(PreferencesPageMixin):
     """
 
     @staticmethod
-    def create_page(config_path: str, widgets_dict: dict) -> Adw.PreferencesPage:
+    def create_page(
+        config_path: str, widgets_dict: dict, parent_window=None
+    ) -> Adw.PreferencesPage:
         """
         Create the Database Updates preference page.
 
         Args:
             config_path: Path to the freshclam.conf file
             widgets_dict: Dictionary to store widget references for later access
+            parent_window: Optional PreferencesWindow for detect/browse callbacks
 
         Returns:
             Configured Adw.PreferencesPage ready to be added to preferences window
@@ -189,9 +199,41 @@ class DatabasePage(PreferencesPageMixin):
         # This is a workaround since these are class methods using mixin
         temp_instance = _DatabasePageHelper()
 
+        # Set up detect/browse callbacks if parent_window is available
+        on_detect = None
+        on_browse = None
+        if parent_window is not None:
+
+            def _on_detect_freshclam():
+                detected = detect_freshclam_conf_path()
+                if detected:
+                    path_row.set_subtitle(detected)
+                    parent_window._freshclam_conf_path = detected
+                    sm = getattr(parent_window, "_settings_manager", None)
+                    if sm:
+                        sm.set("freshclam_conf_path", detected)
+                    toast = Adw.Toast.new(_("Detected: {path}").format(path=detected))
+                    parent_window.add_toast(toast)
+                else:
+                    toast = Adw.Toast.new(_("No freshclam.conf found in known locations"))
+                    parent_window.add_toast(toast)
+
+            def _on_browse_freshclam():
+                DatabasePage._browse_for_config(
+                    parent_window, path_row, "freshclam_conf_path", "_freshclam_conf_path"
+                )
+
+            on_detect = _on_detect_freshclam
+            on_browse = _on_browse_freshclam
+
         # Create file location group
-        temp_instance._create_file_location_group(
-            page, _("Configuration File"), config_path, _("freshclam.conf location")
+        path_row = temp_instance._create_file_location_group(
+            page,
+            _("Configuration File"),
+            config_path,
+            _("freshclam.conf location"),
+            on_detect=on_detect,
+            on_browse=on_browse,
         )
 
         # Create paths group
@@ -210,6 +252,71 @@ class DatabasePage(PreferencesPageMixin):
         DatabasePage._create_proxy_group(page, widgets_dict, temp_instance)
 
         return page
+
+    @staticmethod
+    def _browse_for_config(parent_window, path_row, settings_key, attr_name):
+        """
+        Open a file picker to browse for a .conf config file.
+
+        Uses Gtk.FileDialog on GTK 4.10+ with FileChooserNative fallback.
+
+        Args:
+            parent_window: The PreferencesWindow for transient parent and settings
+            path_row: The Adw.ActionRow to update the subtitle on
+            settings_key: Settings key to persist the selected path
+            attr_name: Attribute name on parent_window to update
+        """
+        conf_filter = Gtk.FileFilter()
+        conf_filter.set_name(_("Configuration files"))
+        conf_filter.add_pattern("*.conf")
+
+        def _apply_selection(file_path):
+            if file_path:
+                path_row.set_subtitle(file_path)
+                setattr(parent_window, attr_name, file_path)
+                sm = getattr(parent_window, "_settings_manager", None)
+                if sm:
+                    sm.set(settings_key, file_path)
+                toast = Adw.Toast.new(_("Selected: {path}").format(path=file_path))
+                parent_window.add_toast(toast)
+
+        if _HAS_FILE_DIALOG:
+            dialog = Gtk.FileDialog()
+            dialog.set_title(_("Select Configuration File"))
+            initial_folder = Gio.File.new_for_path("/etc")
+            dialog.set_initial_folder(initial_folder)
+            filters = Gio.ListStore.new(Gtk.FileFilter)
+            filters.append(conf_filter)
+            dialog.set_filters(filters)
+            dialog.set_default_filter(conf_filter)
+
+            def _on_open_finish(dlg, result):
+                try:
+                    gfile = dlg.open_finish(result)
+                    if gfile:
+                        _apply_selection(gfile.get_path())
+                except GLib.Error:
+                    pass  # User cancelled
+
+            dialog.open(parent_window, None, _on_open_finish)
+        else:
+            dialog = Gtk.FileChooserNative.new(
+                _("Select Configuration File"),
+                parent_window,
+                Gtk.FileChooserAction.OPEN,
+                _("_Select"),
+                _("_Cancel"),
+            )
+            dialog.add_filter(conf_filter)
+
+            def _on_response(dlg, response):
+                if response == Gtk.ResponseType.ACCEPT:
+                    gfile = dlg.get_file()
+                    if gfile:
+                        _apply_selection(gfile.get_path())
+
+            dialog.connect("response", _on_response)
+            dialog.show()
 
     @staticmethod
     def _create_paths_group(page: Adw.PreferencesPage, widgets_dict: dict, helper):

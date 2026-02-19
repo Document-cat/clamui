@@ -80,8 +80,7 @@ SETUP_GUIDES = {
         ],
         "notes": N_("clamd is the ClamAV daemon for faster scanning.")
         + " "
-        + N_("Configuration file:")
-        + " /etc/clamav/clamd.conf",
+        + N_("Configuration file location is auto-detected in Preferences."),
     },
 }
 

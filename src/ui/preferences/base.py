@@ -458,19 +458,31 @@ class PreferencesPageMixin:
         self._show_simple_dialog(title, message)
 
     def _create_file_location_group(
-        self, page: Adw.PreferencesPage, title: str, file_path: str, description: str
+        self,
+        page: Adw.PreferencesPage,
+        title: str,
+        file_path: str,
+        description: str,
+        on_detect=None,
+        on_browse=None,
     ):
         """
         Create a group showing the configuration file location.
 
         Displays the filesystem path to the configuration file so users
-        know where to find it, with a button to open the containing folder.
+        know where to find it, with buttons to open the containing folder
+        and optionally detect or browse for the config file.
 
         Args:
             page: The preferences page to add the group to
             title: Title for the group
             file_path: The filesystem path to display
             description: Description text for the group
+            on_detect: Optional callback for auto-detecting the config path
+            on_browse: Optional callback for browsing for the config file
+
+        Returns:
+            The Adw.ActionRow displaying the file path (for dynamic updates)
         """
         group = Adw.PreferencesGroup()
         group.set_title(title)
@@ -504,8 +516,30 @@ class PreferencesPageMixin:
 
         path_row.add_suffix(open_folder_button)
 
+        # Optionally add Detect button
+        if on_detect is not None:
+            detect_button = Gtk.Button()
+            detect_button.set_label(_("Detect"))
+            detect_button.set_valign(Gtk.Align.CENTER)
+            detect_button.add_css_class("flat")
+            detect_button.set_tooltip_text(_("Auto-detect configuration file location"))
+            detect_button.connect("clicked", lambda btn: on_detect())
+            path_row.add_suffix(detect_button)
+
+        # Optionally add Browse button
+        if on_browse is not None:
+            browse_button = Gtk.Button()
+            browse_button.set_label(_("Browse"))
+            browse_button.set_valign(Gtk.Align.CENTER)
+            browse_button.add_css_class("flat")
+            browse_button.set_tooltip_text(_("Browse for configuration file"))
+            browse_button.connect("clicked", lambda btn: on_browse())
+            path_row.add_suffix(browse_button)
+
         # Make it look like an informational row
         path_row.add_css_class("property")
 
         group.add(path_row)
         page.add(group)
+
+        return path_row

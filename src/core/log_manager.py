@@ -1442,11 +1442,10 @@ class LogManager:
                 return log_path
 
         # Also try to get from clamd.conf if it exists
-        clamd_conf_paths = [
-            "/etc/clamav/clamd.conf",
-            "/etc/clamd.conf",
-            "/etc/clamd.d/scan.conf",
-        ]
+        from .clamav_detection import detect_clamd_conf_path
+
+        detected = detect_clamd_conf_path()
+        clamd_conf_paths = [detected] if detected else []
 
         for conf_path in clamd_conf_paths:
             if self._file_exists_on_host(conf_path):
