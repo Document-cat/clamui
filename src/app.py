@@ -168,6 +168,42 @@ class ClamUIApp(Adw.Application):
             self._quarantine_manager = QuarantineManager()
         return self._quarantine_manager
 
+    def _preinit_quarantine_async(self) -> None:
+        """
+        Pre-initialize quarantine manager asynchronously in a background thread.
+
+        This pre-warms the quarantine manager so it's ready when the user
+        first navigates to the quarantine view, avoiding the first-time lag.
+        """
+        import threading
+
+        def _init_thread():
+            try:
+                _ = self.quarantine_manager
+                logger.debug("QuarantineManager pre-initialized in background")
+                GLib.idle_add(self._preinit_quarantine_view)
+            except Exception as e:
+                logger.warning("Failed to pre-initialize QuarantineManager: %s", e)
+
+        thread = threading.Thread(target=_init_thread, daemon=True)
+        thread.start()
+
+    def _preinit_quarantine_view(self) -> bool:
+        """
+        Pre-create the quarantine view widget after the manager is ready.
+
+        Called on the main thread after QuarantineManager is initialized.
+
+        Returns:
+            False to prevent GLib.idle_add from repeating.
+        """
+        try:
+            _ = self.quarantine_view
+            logger.debug("QuarantineView pre-created in background")
+        except Exception as e:
+            logger.warning("Failed to pre-create QuarantineView: %s", e)
+        return False
+
     # Lazy View Loading Strategy:
     # Why: Views are expensive to create (GTK widget trees, signal connections, layouts)
     # How: @property methods return cached instances, creating only on first access
@@ -346,6 +382,25 @@ class ClamUIApp(Adw.Application):
 
         # Process any initial scan paths from CLI (e.g., from context menu)
         self._process_initial_scan_paths()
+
+        # Pre-initialize heavy resources in background after UI is shown
+        # This avoids the first-time lag when navigating to quarantine view
+        if is_new_window:
+            GLib.idle_add(self._preinit_heavy_resources)
+
+    def _preinit_heavy_resources(self) -> bool:
+        """
+        Pre-initialize heavy resources in the background after UI is shown.
+
+        This reduces the perceived lag when navigating to views like
+        Quarantine that have significant initialization overhead (SQLite
+        connection pools, database schema creation, etc.).
+
+        Returns:
+            False to prevent GLib.idle_add from repeating.
+        """
+        self._preinit_quarantine_async()
+        return False  # Don't repeat
 
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         """
