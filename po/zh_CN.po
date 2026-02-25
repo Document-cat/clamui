@@ -90,7 +90,7 @@ msgstr "警告：目标不存在：{target}"
 
 #: src/cli/scheduled_scan.py:282
 msgid "Error: No valid scan targets found"
-msgstr "警告：未找到有效扫描目标"
+msgstr "错误：未找到有效扫描目标"
 
 #: src/cli/scheduled_scan.py:299
 msgid "Dry run mode - scan not executed"
@@ -189,7 +189,7 @@ msgstr "定期扫描找到了 {count} 个威胁"
 
 #: src/cli/scheduled_scan.py:476
 msgid "Scheduled scan completed with errors"
-msgstr "定期扫描已完成，没有报告错误"
+msgstr "定期扫描已完成，但有错误"
 
 #: src/cli/scheduled_scan.py:479
 #, python-brace-format
