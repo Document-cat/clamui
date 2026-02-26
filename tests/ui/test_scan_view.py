@@ -1577,6 +1577,7 @@ class TestOnScanClicked:
         mock_scan_view._on_scan_state_changed = None
         mock_scan_view._hide_view_results = mock.MagicMock()
         mock_scan_view._start_progress_pulse = mock.MagicMock()
+        mock_scan_view._check_database_and_prompt = mock.MagicMock(return_value=True)
 
     def test_scan_click_with_no_paths_shows_warning(self, mock_scan_view):
         """Test that clicking scan with no paths shows a warning."""
@@ -1661,6 +1662,7 @@ class TestEicarTest:
         mock_scan_view._paths_listbox.get_first_child.return_value = None
         mock_scan_view._create_path_row = mock.MagicMock()
         mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._check_database_and_prompt = mock.MagicMock(return_value=True)
 
     def test_eicar_test_creates_temp_file(self, mock_scan_view, tmp_path):
         """Test that EICAR test creates a temporary test file."""
@@ -1905,6 +1907,7 @@ class TestStartScan:
         mock_scan_view._on_scan_state_changed = None
         mock_scan_view._hide_view_results = mock.MagicMock()
         mock_scan_view._start_progress_pulse = mock.MagicMock()
+        mock_scan_view._check_database_and_prompt = mock.MagicMock(return_value=True)
 
     def test_start_scan_calls_on_scan_clicked(self, mock_scan_view):
         """Test that _start_scan calls _on_scan_clicked."""
