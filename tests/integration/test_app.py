@@ -862,7 +862,7 @@ class TestClamUIAppQuickScanFallback:
         app.activate = mock.MagicMock()
 
         # Call the handler and verify logging
-        with mock.patch("src.app.logger") as mock_logger:
+        with mock.patch("src.tray_integration.logger") as mock_logger:
             app._do_tray_quick_scan()
 
             # Verify warning was logged about fallback
