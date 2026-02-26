@@ -106,7 +106,7 @@
                     <li>Moved blocking subprocess calls to background threads for faster startup</li>
                     <li>Eliminated quarantine view first-switch lag with pre-initialized resources</li>
                     <li>Fixed file manager integration with tri-state detection and removal support</li>
-                    <li>Improved test coverage from 69% to 77%</li>
+                    <li>Improved test coverage from 69% to 71%</li>
                 </ul>
             </description>
         </release>
