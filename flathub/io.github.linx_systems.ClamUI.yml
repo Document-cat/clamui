@@ -160,4 +160,4 @@ modules:
         x-checker-data:
           type: git
           tag-pattern: ^v([\d.]+(?:[a-z]+\d*)?)$
-        commit: 625676380cdc18f52ba2cf0cf2663c564618a3aa
+        commit: cb957b68a8ecdfd29c923c36b0cc69abe5b46e04
