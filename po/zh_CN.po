@@ -3383,7 +3383,7 @@ msgstr "未发现威胁（有 {count} 个文件无法访问）"
 #, python-brace-format
 msgid "{n} threat"
 msgid_plural "{n} threats"
-msgstr[0] "{count} 个威胁"
+msgstr[0] "{n} 个威胁"
 
 #: src/ui/scan_results_dialog.py:202 src/ui/statistics_view.py:285
 msgid "Threats Detected"
