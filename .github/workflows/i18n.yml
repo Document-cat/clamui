@@ -1,7 +1,6 @@
 name: Translations
 
 on:
-  workflow_dispatch:
   push:
     branches: [master]
     paths: ['po/**']
