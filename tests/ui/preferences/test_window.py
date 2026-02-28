@@ -56,8 +56,8 @@ class TestPreferencesWindowInitialization:
 
     @pytest.fixture
     def mock_path_exists(self):
-        """Mock Path.exists to control clamd availability."""
-        with mock.patch("src.ui.preferences.window.Path.exists") as mock_exists:
+        """Mock config_file_exists to control clamd availability."""
+        with mock.patch("src.ui.preferences.window.config_file_exists") as mock_exists:
             mock_exists.return_value = True
             yield mock_exists
 
@@ -302,8 +302,8 @@ class TestPreferencesWindowMethods:
 
     @pytest.fixture
     def mock_path_exists(self):
-        """Mock Path.exists."""
-        with mock.patch("src.ui.preferences.window.Path.exists") as mock_exists:
+        """Mock config_file_exists."""
+        with mock.patch("src.ui.preferences.window.config_file_exists") as mock_exists:
             mock_exists.return_value = True
             yield mock_exists
 
@@ -391,8 +391,8 @@ class TestPreferencesWindowProperties:
 
     @pytest.fixture
     def mock_path_exists(self):
-        """Mock Path.exists."""
-        with mock.patch("src.ui.preferences.window.Path.exists") as mock_exists:
+        """Mock config_file_exists."""
+        with mock.patch("src.ui.preferences.window.config_file_exists") as mock_exists:
             mock_exists.return_value = True
             yield mock_exists
 
@@ -488,8 +488,8 @@ class TestConfigLoading:
 
     @pytest.fixture
     def mock_path_exists(self):
-        """Mock Path.exists."""
-        with mock.patch("src.ui.preferences.window.Path.exists") as mock_exists:
+        """Mock config_file_exists."""
+        with mock.patch("src.ui.preferences.window.config_file_exists") as mock_exists:
             mock_exists.return_value = True
             yield mock_exists
 
@@ -586,8 +586,8 @@ class TestFlatpakSupport:
 
     @pytest.fixture
     def mock_path_exists(self):
-        """Mock Path.exists."""
-        with mock.patch("src.ui.preferences.window.Path.exists") as mock_exists:
+        """Mock config_file_exists."""
+        with mock.patch("src.ui.preferences.window.config_file_exists") as mock_exists:
             mock_exists.return_value = True
             yield mock_exists
 
@@ -701,7 +701,7 @@ class TestClamdAvailability:
         from src.ui.preferences.window import PreferencesWindow
 
         with mock.patch("src.ui.preferences.window.is_flatpak", return_value=False):
-            with mock.patch("src.ui.preferences.window.Path.exists", return_value=True):
+            with mock.patch("src.ui.preferences.window.config_file_exists", return_value=True):
                 with mock.patch.object(PreferencesWindow, "_setup_ui"):
                     with mock.patch.object(PreferencesWindow, "_load_configs"):
                         with mock.patch.object(PreferencesWindow, "_populate_scheduled_fields"):
@@ -719,13 +719,122 @@ class TestClamdAvailability:
         from src.ui.preferences.window import PreferencesWindow
 
         with mock.patch("src.ui.preferences.window.is_flatpak", return_value=False):
-            with mock.patch("src.ui.preferences.window.Path.exists", return_value=False):
+            with mock.patch("src.ui.preferences.window.config_file_exists", return_value=False):
                 with mock.patch.object(PreferencesWindow, "_setup_ui"):
                     with mock.patch.object(PreferencesWindow, "_load_configs"):
                         with mock.patch.object(PreferencesWindow, "_populate_scheduled_fields"):
                             window = PreferencesWindow()
                             assert window._clamd_available is False
 
+    def test_flatpak_clamd_available_via_host_check(
+        self,
+        mock_gi_modules,
+        mock_parse_config,
+        mock_scheduler,
+        mock_page_modules,
+    ):
+        """Test clamd is available in Flatpak when host config exists.
+
+        Regression test: Previously used Path.exists() which checked the
+        Flatpak sandbox filesystem where /etc/clamd.d/scan.conf doesn't
+        exist. Now uses config_file_exists() which checks the HOST via
+        flatpak-spawn.
+        """
+        from src.ui.preferences.window import PreferencesWindow
+
+        with mock.patch("src.ui.preferences.window.is_flatpak", return_value=True):
+            with mock.patch(
+                "src.ui.preferences.window.resolve_clamd_conf_path",
+                return_value="/etc/clamd.d/scan.conf",
+            ):
+                with mock.patch(
+                    "src.ui.preferences.window.config_file_exists", return_value=True
+                ) as mock_exists:
+                    with mock.patch(
+                        "src.ui.preferences.window.get_freshclam_config_path",
+                        return_value=None,
+                    ):
+                        with mock.patch(
+                            "src.ui.preferences.window.resolve_freshclam_conf_path",
+                            return_value="/etc/freshclam.conf",
+                        ):
+                            with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                                with mock.patch.object(PreferencesWindow, "_load_configs"):
+                                    with mock.patch.object(
+                                        PreferencesWindow, "_populate_scheduled_fields"
+                                    ):
+                                        window = PreferencesWindow()
+                                        assert window._clamd_available is True
+                                        assert window._clamd_conf_path == "/etc/clamd.d/scan.conf"
+                                        # Verify host-aware check was used
+                                        mock_exists.assert_called_with("/etc/clamd.d/scan.conf")
+
+    def test_flatpak_clamd_unavailable_when_host_config_missing(
+        self,
+        mock_gi_modules,
+        mock_parse_config,
+        mock_scheduler,
+        mock_page_modules,
+    ):
+        """Test clamd is unavailable in Flatpak when host config missing."""
+        from src.ui.preferences.window import PreferencesWindow
+
+        with mock.patch("src.ui.preferences.window.is_flatpak", return_value=True):
+            with mock.patch(
+                "src.ui.preferences.window.resolve_clamd_conf_path", return_value=None
+            ):
+                with mock.patch(
+                    "src.ui.preferences.window.config_file_exists", return_value=False
+                ):
+                    with mock.patch(
+                        "src.ui.preferences.window.get_freshclam_config_path",
+                        return_value=None,
+                    ):
+                        with mock.patch(
+                            "src.ui.preferences.window.resolve_freshclam_conf_path",
+                            return_value="/etc/freshclam.conf",
+                        ):
+                            with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                                with mock.patch.object(PreferencesWindow, "_load_configs"):
+                                    with mock.patch.object(
+                                        PreferencesWindow, "_populate_scheduled_fields"
+                                    ):
+                                        window = PreferencesWindow()
+                                        assert window._clamd_available is False
+
+    def test_availability_uses_config_file_exists_not_path_exists(
+        self,
+        mock_gi_modules,
+        mock_parse_config,
+        mock_scheduler,
+        mock_page_modules,
+    ):
+        """Test that availability check uses config_file_exists (host-aware).
+
+        Core regression test: verifies Path.exists() is NOT used for the
+        clamd availability check. config_file_exists() uses flatpak-spawn
+        in Flatpak mode to check the host filesystem.
+        """
+        from src.ui.preferences.window import PreferencesWindow
+
+        with mock.patch("src.ui.preferences.window.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.ui.preferences.window.resolve_clamd_conf_path",
+                return_value="/etc/clamav/clamd.conf",
+            ):
+                with mock.patch(
+                    "src.ui.preferences.window.config_file_exists", return_value=True
+                ) as mock_cfe:
+                    with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                        with mock.patch.object(PreferencesWindow, "_load_configs"):
+                            with mock.patch.object(
+                                PreferencesWindow, "_populate_scheduled_fields"
+                            ):
+                                window = PreferencesWindow()
+                                assert window._clamd_available is True
+                                # config_file_exists must be called for the
+                                # availability check (not Path.exists)
+                                mock_cfe.assert_called_with("/etc/clamav/clamd.conf")
 
 class TestLazyPageCreation:
     """Tests for lazy preference page creation.
@@ -744,8 +853,8 @@ class TestLazyPageCreation:
 
     @pytest.fixture
     def mock_path_exists(self):
-        """Mock Path.exists to control clamd availability."""
-        with mock.patch("src.ui.preferences.window.Path.exists") as mock_exists:
+        """Mock config_file_exists to control clamd availability."""
+        with mock.patch("src.ui.preferences.window.config_file_exists") as mock_exists:
             mock_exists.return_value = True
             yield mock_exists
 

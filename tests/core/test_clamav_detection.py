@@ -799,27 +799,27 @@ class TestCheckDatabaseAvailable:
 
 
 class TestConfigFileExists:
-    """Tests for _config_file_exists() function."""
+    """Tests for config_file_exists() function."""
 
     def test_native_file_exists(self):
         """Test native mode checks os.path.isfile."""
         with mock.patch.object(clamav_detection, "is_flatpak", return_value=False):
             with mock.patch("os.path.isfile", return_value=True) as mock_isfile:
-                assert clamav_detection._config_file_exists("/etc/clamav/clamd.conf") is True
+                assert clamav_detection.config_file_exists("/etc/clamav/clamd.conf") is True
                 mock_isfile.assert_called_once_with("/etc/clamav/clamd.conf")
 
     def test_native_file_not_exists(self):
         """Test native mode returns False for missing files."""
         with mock.patch.object(clamav_detection, "is_flatpak", return_value=False):
             with mock.patch("os.path.isfile", return_value=False):
-                assert clamav_detection._config_file_exists("/etc/clamav/clamd.conf") is False
+                assert clamav_detection.config_file_exists("/etc/clamav/clamd.conf") is False
 
     def test_flatpak_file_exists(self):
         """Test Flatpak mode uses flatpak-spawn to check host."""
         with mock.patch.object(clamav_detection, "is_flatpak", return_value=True):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=0)
-                assert clamav_detection._config_file_exists("/etc/clamav/clamd.conf") is True
+                assert clamav_detection.config_file_exists("/etc/clamav/clamd.conf") is True
                 mock_run.assert_called_once_with(
                     ["flatpak-spawn", "--host", "test", "-f", "/etc/clamav/clamd.conf"],
                     capture_output=True,
@@ -831,14 +831,86 @@ class TestConfigFileExists:
         with mock.patch.object(clamav_detection, "is_flatpak", return_value=True):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=1)
-                assert clamav_detection._config_file_exists("/etc/clamav/clamd.conf") is False
+                assert clamav_detection.config_file_exists("/etc/clamav/clamd.conf") is False
 
     def test_flatpak_subprocess_error(self):
         """Test Flatpak mode returns False on subprocess error."""
         with mock.patch.object(clamav_detection, "is_flatpak", return_value=True):
             with mock.patch("subprocess.run", side_effect=OSError("no such command")):
-                assert clamav_detection._config_file_exists("/etc/clamav/clamd.conf") is False
+                assert clamav_detection.config_file_exists("/etc/clamav/clamd.conf") is False
 
+    def test_flatpak_checks_fedora_path_on_host(self):
+        """Test Flatpak mode checks Fedora path /etc/clamd.d/scan.conf via host."""
+        with mock.patch.object(clamav_detection, "is_flatpak", return_value=True):
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.return_value = mock.Mock(returncode=0)
+                assert clamav_detection.config_file_exists("/etc/clamd.d/scan.conf") is True
+                mock_run.assert_called_once_with(
+                    ["flatpak-spawn", "--host", "test", "-f", "/etc/clamd.d/scan.conf"],
+                    capture_output=True,
+                    timeout=5,
+                )
+
+    def test_flatpak_timeout_returns_false(self):
+        """Test Flatpak mode returns False when flatpak-spawn times out."""
+        import subprocess as _subprocess
+
+        with mock.patch.object(clamav_detection, "is_flatpak", return_value=True):
+            with mock.patch(
+                "subprocess.run", side_effect=_subprocess.TimeoutExpired("test", 5)
+            ):
+                assert clamav_detection.config_file_exists("/etc/clamd.d/scan.conf") is False
+
+
+class TestFlatpakConfigDetection:
+    """Tests verifying Flatpak host-aware config detection for distro-specific paths.
+
+    Regression tests for the bug where config_file_exists() correctly found
+    clamd.conf on the host via flatpak-spawn, but the availability check in
+    PreferencesWindow used Path.exists() which checked the sandbox filesystem.
+    Fix: window.py now uses config_file_exists() for the availability check.
+    """
+
+    def test_detect_clamd_fedora_path_in_flatpak(self):
+        """Test detect_clamd_conf_path finds Fedora config via flatpak-spawn."""
+
+        def host_exists(p):
+            # Simulate Fedora host: only /etc/clamd.d/scan.conf exists
+            return p == "/etc/clamd.d/scan.conf"
+
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=host_exists):
+            result = clamav_detection.detect_clamd_conf_path()
+            assert result == "/etc/clamd.d/scan.conf"
+
+    def test_resolve_clamd_fedora_path_in_flatpak(self):
+        """Test resolve_clamd_conf_path returns Fedora path in Flatpak."""
+        mock_sm = mock.Mock()
+        mock_sm.get.return_value = ""
+
+        def host_exists(p):
+            return p == "/etc/clamd.d/scan.conf"
+
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=host_exists):
+            result = clamav_detection.resolve_clamd_conf_path(mock_sm)
+            assert result == "/etc/clamd.d/scan.conf"
+            mock_sm.set.assert_called_with("clamd_conf_path", "/etc/clamd.d/scan.conf")
+
+    def test_resolve_uses_config_file_exists_not_path_exists(self):
+        """Test resolve checks existence via config_file_exists, not Path.exists.
+
+        This is the core regression test: config_file_exists uses flatpak-spawn
+        to check the HOST filesystem, while Path.exists checks the SANDBOX.
+        """
+        mock_sm = mock.Mock()
+        mock_sm.get.return_value = "/etc/clamd.d/scan.conf"
+
+        with mock.patch.object(
+            clamav_detection, "config_file_exists", return_value=True
+        ) as mock_check:
+            result = clamav_detection.resolve_clamd_conf_path(mock_sm)
+            assert result == "/etc/clamd.d/scan.conf"
+            # Verify config_file_exists was called (host-aware check)
+            mock_check.assert_called_with("/etc/clamd.d/scan.conf")
 
 class TestDetectClamdConfPath:
     """Tests for detect_clamd_conf_path() function."""
@@ -847,7 +919,7 @@ class TestDetectClamdConfPath:
         """Test detects Debian/Ubuntu path first."""
         with mock.patch.object(
             clamav_detection,
-            "_config_file_exists",
+            "config_file_exists",
             side_effect=lambda p: p == "/etc/clamav/clamd.conf",
         ):
             assert clamav_detection.detect_clamd_conf_path() == "/etc/clamav/clamd.conf"
@@ -858,7 +930,7 @@ class TestDetectClamdConfPath:
         def exists(p):
             return p == "/etc/clamd.d/scan.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", side_effect=exists):
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=exists):
             assert clamav_detection.detect_clamd_conf_path() == "/etc/clamd.d/scan.conf"
 
     def test_finds_generic_path(self):
@@ -867,17 +939,17 @@ class TestDetectClamdConfPath:
         def exists(p):
             return p == "/etc/clamd.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", side_effect=exists):
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=exists):
             assert clamav_detection.detect_clamd_conf_path() == "/etc/clamd.conf"
 
     def test_returns_none_when_not_found(self):
         """Test returns None when no config file found."""
-        with mock.patch.object(clamav_detection, "_config_file_exists", return_value=False):
+        with mock.patch.object(clamav_detection, "config_file_exists", return_value=False):
             assert clamav_detection.detect_clamd_conf_path() is None
 
     def test_priority_order(self):
         """Test Debian path is preferred over Fedora when both exist."""
-        with mock.patch.object(clamav_detection, "_config_file_exists", return_value=True):
+        with mock.patch.object(clamav_detection, "config_file_exists", return_value=True):
             assert clamav_detection.detect_clamd_conf_path() == "/etc/clamav/clamd.conf"
 
 
@@ -888,7 +960,7 @@ class TestDetectFreshclamConfPath:
         """Test detects Debian/Ubuntu path."""
         with mock.patch.object(
             clamav_detection,
-            "_config_file_exists",
+            "config_file_exists",
             side_effect=lambda p: p == "/etc/clamav/freshclam.conf",
         ):
             assert clamav_detection.detect_freshclam_conf_path() == "/etc/clamav/freshclam.conf"
@@ -899,12 +971,12 @@ class TestDetectFreshclamConfPath:
         def exists(p):
             return p == "/etc/freshclam.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", side_effect=exists):
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=exists):
             assert clamav_detection.detect_freshclam_conf_path() == "/etc/freshclam.conf"
 
     def test_returns_none_when_not_found(self):
         """Test returns None when no config file found."""
-        with mock.patch.object(clamav_detection, "_config_file_exists", return_value=False):
+        with mock.patch.object(clamav_detection, "config_file_exists", return_value=False):
             assert clamav_detection.detect_freshclam_conf_path() is None
 
 
@@ -916,7 +988,7 @@ class TestResolveClamdConfPath:
         mock_sm = mock.Mock()
         mock_sm.get.return_value = "/custom/clamd.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", return_value=True):
+        with mock.patch.object(clamav_detection, "config_file_exists", return_value=True):
             result = clamav_detection.resolve_clamd_conf_path(mock_sm)
             assert result == "/custom/clamd.conf"
             mock_sm.get.assert_called_once_with("clamd_conf_path", "")
@@ -929,7 +1001,7 @@ class TestResolveClamdConfPath:
         def exists(p):
             return p != "/gone/clamd.conf" and p == "/etc/clamav/clamd.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", side_effect=exists):
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=exists):
             result = clamav_detection.resolve_clamd_conf_path(mock_sm)
             assert result == "/etc/clamav/clamd.conf"
             # Should have cleared the invalid path
@@ -975,7 +1047,7 @@ class TestResolveFreshclamConfPath:
         mock_sm = mock.Mock()
         mock_sm.get.return_value = "/custom/freshclam.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", return_value=True):
+        with mock.patch.object(clamav_detection, "config_file_exists", return_value=True):
             result = clamav_detection.resolve_freshclam_conf_path(mock_sm)
             assert result == "/custom/freshclam.conf"
 
@@ -987,7 +1059,7 @@ class TestResolveFreshclamConfPath:
         def exists(p):
             return p != "/gone/freshclam.conf" and p == "/etc/clamav/freshclam.conf"
 
-        with mock.patch.object(clamav_detection, "_config_file_exists", side_effect=exists):
+        with mock.patch.object(clamav_detection, "config_file_exists", side_effect=exists):
             result = clamav_detection.resolve_freshclam_conf_path(mock_sm)
             assert result == "/etc/clamav/freshclam.conf"
             mock_sm.set.assert_any_call("freshclam_conf_path", "")

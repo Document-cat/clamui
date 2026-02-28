@@ -344,7 +344,7 @@ _FRESHCLAM_CONF_PATHS = [
 ]
 
 
-def _config_file_exists(path: str) -> bool:
+def config_file_exists(path: str) -> bool:
     """
     Check if a config file exists on the host filesystem.
 
@@ -384,7 +384,7 @@ def detect_clamd_conf_path() -> str | None:
         Path to the first existing config file, or None if not found
     """
     for path in _CLAMD_CONF_PATHS:
-        if _config_file_exists(path):
+        if config_file_exists(path):
             logger.info("Detected clamd config at: %s", path)
             return path
     logger.info("No clamd config file found in known locations")
@@ -403,7 +403,7 @@ def detect_freshclam_conf_path() -> str | None:
         Path to the first existing config file, or None if not found
     """
     for path in _FRESHCLAM_CONF_PATHS:
-        if _config_file_exists(path):
+        if config_file_exists(path):
             logger.info("Detected freshclam config at: %s", path)
             return path
     logger.info("No freshclam config file found in known locations")
@@ -429,7 +429,7 @@ def resolve_clamd_conf_path(settings_manager=None) -> str | None:
     """
     if settings_manager:
         saved = settings_manager.get("clamd_conf_path", "")
-        if saved and _config_file_exists(saved):
+        if saved and config_file_exists(saved):
             return saved
         if saved:
             logger.info("Saved clamd config path invalid (%s), re-detecting", saved)
@@ -460,7 +460,7 @@ def resolve_freshclam_conf_path(settings_manager=None) -> str | None:
     """
     if settings_manager:
         saved = settings_manager.get("freshclam_conf_path", "")
-        if saved and _config_file_exists(saved):
+        if saved and config_file_exists(saved):
             return saved
         if saved:
             logger.info("Saved freshclam config path invalid (%s), re-detecting", saved)

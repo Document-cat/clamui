@@ -8,7 +8,6 @@ GNOME Settings-style sidebar navigation using Adw.Leaflet.
 """
 
 import logging
-from pathlib import Path
 
 import gi
 
@@ -17,7 +16,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 from ...core.clamav_config import parse_config
-from ...core.clamav_detection import resolve_clamd_conf_path, resolve_freshclam_conf_path
+from ...core.clamav_detection import config_file_exists, resolve_clamd_conf_path, resolve_freshclam_conf_path
 from ...core.flatpak import (
     ensure_freshclam_config,
     get_freshclam_config_path,
@@ -212,7 +211,7 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
             )
 
         # Check if clamd.conf exists
-        if Path(self._clamd_conf_path).exists():
+        if config_file_exists(self._clamd_conf_path):
             self._clamd_available = True
 
         # Saving state (used by SavePage)
