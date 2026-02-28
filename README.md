@@ -49,6 +49,7 @@ ClamUI provides a comprehensive set of features designed to make antivirus prote
 - **Async Scanning** — Background processing keeps the UI responsive during scans
 - **Quarantine Management** — Safely isolate and manage detected threats
 - **Scan Profiles** — Create custom configurations for different use cases
+- **Automatic Device Scanning** — Scan USB drives and external storage on mount
 
 </td>
 <td width="50%" valign="top">
@@ -79,6 +80,8 @@ ClamUI provides a comprehensive set of features designed to make antivirus prote
 - **Multiple Scan Backends** — Choose between daemon (clamd) or direct (clamscan)
 - **Scheduled Scans** — Configure automatic scanning with systemd or cron
 - **Customizable Settings** — Extensive configuration options for your workflow
+- **CLI Subcommands** — Full headless management: scan, quarantine, profiles, status, history
+- **Multi-Distro Support** — Auto-detects ClamAV config paths across Debian, Fedora, and more
 
 </td>
 </tr>
@@ -141,13 +144,41 @@ uv run clamui
 
 ### Command Line
 
+ClamUI includes a full CLI for headless use. Run `clamui` without arguments to launch the GUI, or use subcommands:
+
 ```bash
-# Launch the application
+# Launch the graphical interface
 clamui
 
-# Scan specific files directly
-clamui /path/to/file1 /path/to/folder
+# Scan files or directories
+clamui scan /path/to/file
+clamui scan /home/user/Downloads --profile "Quick Scan" --quarantine --json
+
+# Manage quarantined files
+clamui quarantine list
+clamui quarantine restore 42
+clamui quarantine delete 42
+
+# Manage scan profiles
+clamui profile list
+clamui profile show "Full Scan"
+clamui profile export "Quick Scan" backup.json
+clamui profile import backup.json
+
+# View ClamAV and ClamUI status
+clamui status
+clamui status --json
+
+# View scan history
+clamui history
+clamui history --limit 50 --type scan --json
+
+# Get help
+clamui help
+clamui help scan
 ```
+
+All subcommands support `--json` for scripting. Exit codes: 0 = clean/success, 1 = threats found, 2 = error.
 
 > **Detailed Instructions:** See the [User Guide](./docs/USER_GUIDE.md)
 
@@ -190,11 +221,15 @@ ClamUI stores user preferences and can be configured through the Preferences dia
 <td><strong>Scan Profiles</strong></td>
 <td>Create custom scan configurations with exclusion patterns</td>
 </tr>
+<tr>
+<td><strong>Device Scanning</strong></td>
+<td>Automatically scan USB drives and external storage when connected</td>
+</tr>
 </table>
 
 <br>
 
-> **For complete configuration reference:** See the [Configuration Reference](./docs/CONFIGURATION.md) for all 15 settings and examples
+> **For complete configuration reference:** See the [Configuration Reference](./docs/CONFIGURATION.md) for all settings and examples
 
 ---
 

@@ -149,6 +149,8 @@ clamui --version
 
 # For Flatpak
 flatpak info io.github.linx_systems.ClamUI
+# Check CLI subcommands
+clamui help
 ```
 
 Check ClamAV is installed:
@@ -173,6 +175,14 @@ After installation, launch ClamUI in one of these ways:
 
    # Native installation
    clamui
+   ```
+3. **From the Terminal (CLI mode):**
+   ClamUI also supports headless subcommands that run without a display server:
+   ```bash
+   clamui scan /path/to/file          # Scan without GUI
+   clamui status                       # Check ClamAV status
+   clamui quarantine list              # List quarantined files
+   clamui help                         # Show all commands
    ```
 
 When you first launch, ClamUI will:

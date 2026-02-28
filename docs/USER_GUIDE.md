@@ -62,6 +62,11 @@ Keep ClamUI accessible with system tray integration. Enable the system tray icon
 
 Solve common issues quickly with this reference guide. Fix "ClamAV not found" errors with installation verification, resolve daemon connection issues, diagnose scan errors and permission problems, troubleshoot quarantine issues (restore failures, database corruption), debug scheduled scans that won't run, and address performance issues (slow scans, high memory usage).
 
+### 🖥️ [Command-Line Interface](user-guide/cli.md)
+
+Use ClamUI without a graphical interface for scripting, automation, and headless servers. Available subcommands: `scan` (one-shot scanning with profile and quarantine support), `quarantine` (list, restore, delete quarantined files), `profile` (list, show, export, import scan profiles), `status` (ClamAV version, backend, daemon info), `history` (scan log viewer with type filtering). All commands support `--json` output for integration with other tools.
+
+
 ### ❓ [Frequently Asked Questions](user-guide/faq.md)
 
 Get quick answers to common questions about ClamUI and antivirus scanning on Linux. Topics include: ClamUI vs ClamAV, how often to scan, what to do when threats are found, handling false positives, system performance impact, quarantine data safety, virus definition updates, and scanning external drives and USB devices.

@@ -12,6 +12,7 @@ This document provides comprehensive reference documentation for all configurati
     - [Quarantine Settings](#quarantine-settings)
     - [Scheduled Scan Settings](#scheduled-scan-settings)
     - [Scan Backend Settings](#scan-backend-settings)
+    - [Device Scan Settings](#device-scan-settings)
 4. [Scan Profiles](#scan-profiles)
     - [Profile Structure](#profile-structure)
     - [Default Profiles](#default-profiles)
@@ -676,6 +677,127 @@ This setting only applies when `scan_backend` is `"daemon"` or `"auto"` (and dae
 ```
 
 ---
+
+### Device Scan Settings
+
+ClamUI can automatically scan USB drives and external storage devices when they are mounted.
+
+#### `device_scan_enabled`
+
+**Type:** Boolean
+**Default:** `false`
+**Valid Values:** `true`, `false`
+
+Controls whether ClamUI monitors for newly mounted storage devices and triggers automatic scans.
+
+**Description:**
+When enabled, ClamUI uses GIO volume monitoring to detect mount events. When a removable or external storage device is connected, a background ClamAV scan starts automatically. Scan results appear as desktop notifications.
+
+**Example:**
+
+```json
+{
+  "device_scan_enabled": false
+}
+```
+
+---
+
+#### `device_scan_types`
+
+**Type:** Array of Strings
+**Default:** `["removable", "external"]`
+**Valid Values:** `"removable"`, `"external"`, `"network"`
+
+Specifies which types of devices trigger automatic scans.
+
+**Description:**
+
+- **`"removable"`**: USB flash drives, SD cards, and other removable media
+- **`"external"`**: External hard drives and SSDs connected via USB/eSATA
+- **`"network"`**: Network-mounted filesystems (NFS, SMB/CIFS)
+
+**Example:**
+
+```json
+{
+  "device_scan_types": ["removable"]
+}
+```
+
+---
+
+#### `device_scan_max_size_gb`
+
+**Type:** Integer
+**Default:** `0` (no limit)
+**Valid Values:** `0` or positive integer
+
+Maximum device size in GB to trigger automatic scans. Devices larger than this limit are skipped. Set to `0` to scan devices of any size.
+
+**Example:**
+
+```json
+{
+  "device_scan_max_size_gb": 64
+}
+```
+
+---
+
+#### `device_scan_delay_seconds`
+
+**Type:** Integer
+**Default:** `5`
+**Valid Values:** `0`-`60`
+
+Delay in seconds after a mount event before starting the scan. Allows the filesystem to fully mount and settle before scanning begins.
+
+**Example:**
+
+```json
+{
+  "device_scan_delay_seconds": 10
+}
+```
+
+---
+
+#### `device_scan_auto_quarantine`
+
+**Type:** Boolean
+**Default:** `false`
+**Valid Values:** `true`, `false`
+
+Controls whether threats found during device scans are automatically quarantined.
+
+**Example:**
+
+```json
+{
+  "device_scan_auto_quarantine": true
+}
+```
+
+---
+
+#### `device_scan_skip_battery`
+
+**Type:** Boolean
+**Default:** `true`
+**Valid Values:** `true`, `false`
+
+Controls whether device scans are skipped when the system is running on battery power.
+
+**Example:**
+
+```json
+{
+  "device_scan_skip_battery": true
+}
+```
+
+
 
 ## Scan Profiles
 

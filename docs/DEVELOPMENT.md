@@ -106,6 +106,20 @@ ClamUI includes a CLI tool for scheduled scans (used by systemd/cron):
 ```bash
 uv run clamui-scheduled-scan --help
 ```
+### CLI Subcommands
+
+ClamUI provides headless subcommands that work without a display server:
+
+```bash
+uv run clamui scan /path/to/file      # One-shot scan
+uv run clamui quarantine list          # List quarantined files
+uv run clamui profile list             # List scan profiles
+uv run clamui status                   # ClamAV status
+uv run clamui history                  # Scan history
+uv run clamui help                     # Command overview
+```
+
+All subcommands support `--json` output for scripting integration.
 
 ---
 
@@ -411,18 +425,26 @@ class TestMyFeature:
 ```
 clamui/
 ├── src/
-│   ├── main.py               # Application entry point
+│   ├── main.py               # Application entry point (routes CLI vs GUI)
 │   ├── app.py                # Adw.Application class
-│   ├── cli/                  # CLI tools
+│   ├── cli/                  # CLI subcommands (scan, quarantine, profile, status, history)
+│   │   ├── router.py         # Subcommand dispatcher
+│   │   ├── scan_cmd.py       # Headless scan with --profile, --quarantine, --json
+│   │   ├── quarantine_cmd.py # Quarantine list/restore/delete
+│   │   ├── profile_cmd.py    # Profile list/show/export/import
+│   │   ├── status_cmd.py     # ClamAV status and statistics
+│   │   ├── history_cmd.py    # Scan history viewer
+│   │   ├── help_cmd.py       # Detailed help and examples
+│   │   └── output.py         # Shared formatting utilities
 │   ├── core/                 # Business logic modules
 │   ├── profiles/             # Scan profile management
 │   └── ui/                   # GTK4/Adwaita UI components
+│       └── scan/             # Modular scan view (coordinator pattern)
 ├── tests/                    # Test suite (mirrors src structure)
 ├── docs/                     # Documentation
 ├── debian/                   # Debian packaging
 ├── .github/workflows/        # CI workflows
 └── pyproject.toml            # Project configuration
-```
 
 For a detailed breakdown of all modules, see the [Project Structure](../README.md#project-structure) section in the
 README.
