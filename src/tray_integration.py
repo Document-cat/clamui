@@ -22,6 +22,7 @@ class TrayIntegration:
         """Initialize the tray indicator if available."""
         try:
             from .ui.tray_indicator import TrayIndicator
+
             self._app._tray_indicator = TrayIndicator(self._app)
             logger.info("Tray indicator initialized")
         except Exception as e:
@@ -41,10 +42,7 @@ class TrayIntegration:
         if self._app._tray_indicator is None:
             return
 
-        profile_data = [
-            (p.id, p.name, p.description)
-            for p in profiles
-        ]
+        profile_data = [(p.id, p.name, p.description) for p in profiles]
 
         current_profile_id = None
         if self._app.scan_view is not None:
@@ -60,6 +58,7 @@ class TrayIntegration:
     def trigger_quick_scan(self):
         """Trigger a quick scan from the tray menu."""
         from gi.repository import GLib
+
         GLib.idle_add(self._do_tray_quick_scan)
 
     def _do_tray_quick_scan(self):
@@ -80,6 +79,7 @@ class TrayIntegration:
             self._app.scan_view._start_scan()
         else:
             import os
+
             home_dir = os.path.expanduser("~")
             self._app.scan_view._set_selected_path(home_dir)
             self._app._view_coordinator.switch_to_view("scan", self._app.scan_view)
@@ -91,6 +91,7 @@ class TrayIntegration:
     def trigger_full_scan(self):
         """Trigger a full system scan from the tray menu."""
         from gi.repository import GLib
+
         GLib.idle_add(self._do_tray_full_scan)
 
     def _do_tray_full_scan(self):
@@ -109,6 +110,7 @@ class TrayIntegration:
     def trigger_update(self):
         """Trigger database update from the tray menu."""
         from gi.repository import GLib
+
         GLib.idle_add(self._do_tray_update)
 
     def _do_tray_update(self):
@@ -126,6 +128,7 @@ class TrayIntegration:
     def trigger_quit(self):
         """Quit the application from the tray menu."""
         from gi.repository import GLib
+
         GLib.idle_add(self._do_tray_quit)
 
     def _do_tray_quit(self):
@@ -133,20 +136,64 @@ class TrayIntegration:
         self._app.quit()
         return False
 
+    @staticmethod
+    def _is_window_visible(win) -> bool:
+        """Check window visibility across Gtk widget API variants."""
+        if hasattr(win, "is_visible"):
+            return bool(win.is_visible())
+        if hasattr(win, "get_visible"):
+            return bool(win.get_visible())
+        return True
+
+    def _get_window_for_toggle(self):
+        """Get a window instance even when no active window is focused."""
+        win = self._app.props.active_window
+        if win is not None:
+            return win
+
+        if hasattr(self._app, "get_windows"):
+            windows = self._app.get_windows()
+            if windows:
+                return windows[0]
+
+        return None
+
+    def _sync_window_menu_label(self, win) -> None:
+        """Update tray menu label to match current window visibility."""
+        tray = getattr(self._app, "_tray_indicator", None)
+        if tray is None or not hasattr(tray, "update_window_menu_label"):
+            return
+        tray.update_window_menu_label(visible=self._is_window_visible(win))
+
     def toggle_window(self):
         """Toggle the main window visibility from the tray."""
-        win = self._app.props.active_window
+        win = self._get_window_for_toggle()
         if win is None:
+            # Ensure a window exists (e.g. app started minimized to tray).
+            self._app.activate()
+            win = self._get_window_for_toggle()
+
+        if win is None:
+            logger.warning("Tray toggle requested but no application window is available")
             return
 
-        if win.is_active():
-            win.hide()
+        if self._is_window_visible(win):
+            if hasattr(win, "hide_window"):
+                win.hide_window()
+            else:
+                win.hide()
         else:
-            win.present()
+            if hasattr(win, "show_window"):
+                win.show_window()
+            else:
+                win.present()
+
+        self._sync_window_menu_label(win)
 
     def select_profile(self, profile_id):
         """Select a scan profile from the tray menu."""
         from gi.repository import GLib
+
         GLib.idle_add(self._do_tray_profile_select, profile_id)
 
     def _do_tray_profile_select(self, profile_id):

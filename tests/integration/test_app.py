@@ -968,3 +968,47 @@ class TestClamUIAppQuickScanFallback:
 
             # Verify the expanded path is passed to _set_selected_path
             mock_scan_view._set_selected_path.assert_called_once_with("/home/specific_user")
+
+
+class TestClamUIAppScanStateTrayUpdates:
+    """Regression tests for scan-state-driven tray updates."""
+
+    def test_scan_start_sets_scanning_status_and_clears_progress(self, app):
+        """Starting a scan should move tray to scanning state."""
+        app._tray_indicator = mock.MagicMock()
+        app._notification_dispatcher = mock.MagicMock()
+
+        app._on_scan_state_changed(is_scanning=True, result=None)
+
+        assert app._is_scan_active is True
+        app._tray_indicator.update_status.assert_called_once_with("scanning")
+        app._tray_indicator.update_scan_progress.assert_called_once_with(0)
+        app._notification_dispatcher.show_scan_result_notification.assert_not_called()
+
+    def test_scan_complete_clean_sets_protected_and_notifies(self, app):
+        """Clean completion should set protected tray state and notify."""
+        app._tray_indicator = mock.MagicMock()
+        app._notification_dispatcher = mock.MagicMock()
+        result = mock.MagicMock()
+        result.has_threats = False
+        result.is_clean = True
+
+        app._on_scan_state_changed(is_scanning=False, result=result)
+
+        assert app._is_scan_active is False
+        app._tray_indicator.update_scan_progress.assert_called_once_with(0)
+        app._tray_indicator.update_status.assert_called_once_with("protected")
+        app._notification_dispatcher.show_scan_result_notification.assert_called_once_with(result)
+
+    def test_scan_complete_threat_sets_threat_status(self, app):
+        """Threat completion should set tray to threat state."""
+        app._tray_indicator = mock.MagicMock()
+        app._notification_dispatcher = mock.MagicMock()
+        result = mock.MagicMock()
+        result.has_threats = True
+        result.is_clean = False
+
+        app._on_scan_state_changed(is_scanning=False, result=result)
+
+        app._tray_indicator.update_scan_progress.assert_called_once_with(0)
+        app._tray_indicator.update_status.assert_called_once_with("threat")

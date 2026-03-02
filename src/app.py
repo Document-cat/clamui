@@ -565,6 +565,25 @@ class ClamUIApp(Adw.Application):
         """Handle scan state changes."""
         self._is_scan_active = is_scanning
 
+        if self._tray_indicator is not None:
+            if is_scanning:
+                # Show active scanning state and clear stale progress label.
+                self._tray_indicator.update_status("scanning")
+                self._tray_indicator.update_scan_progress(0)
+            else:
+                # Clear any scan progress indicator on completion.
+                self._tray_indicator.update_scan_progress(0)
+
+                if result is not None:
+                    if result.has_threats:
+                        self._tray_indicator.update_status("threat")
+                    elif result.is_clean:
+                        self._tray_indicator.update_status("protected")
+                    else:
+                        self._tray_indicator.update_status("warning")
+                else:
+                    self._tray_indicator.update_status("protected")
+
         if result is not None:
             self._notification_dispatcher.show_scan_result_notification(result)
 
