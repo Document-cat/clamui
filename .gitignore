@@ -91,3 +91,19 @@ squashfs-root/
 .opencodeignore
 clamui.zip
 *.AppImage
+
+# Claude Code sandbox stubs (empty read-only files blocking writes to git internals)
+HEAD
+config
+hooks
+objects
+refs
+.bash_profile
+.bashrc
+.gitconfig
+.gitmodules
+.profile
+.ripgreprc
+.zprofile
+.zshrc
+.mcp.json
