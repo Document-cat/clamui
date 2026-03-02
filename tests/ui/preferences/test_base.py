@@ -410,3 +410,14 @@ class TestPopulateBoolField:
 
         # Should convert to lowercase and set active
         mock_widget.set_active.assert_called_once_with(True)
+
+    def test_populate_bool_field_handles_missing_widget(self, mock_gi_modules):
+        """Test populate_bool_field safely handles missing widget keys."""
+        from src.ui.preferences.base import populate_bool_field
+
+        mock_config = mock.MagicMock()
+        mock_config.has_key.return_value = True
+        mock_config.get_value.return_value = "yes"
+
+        # Should not raise when widget key is missing
+        populate_bool_field(mock_config, {}, "LogVerbose")

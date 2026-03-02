@@ -434,6 +434,34 @@ class TestDatabasePageCollectData:
         assert "LogVerbose" in result
         assert "LogSyslog" in result
 
+    def test_collect_data_skips_missing_widgets_without_crashing(self, mock_gi_modules):
+        """Test collect_data handles missing widget keys safely."""
+        from src.ui.preferences.database_page import DatabasePage
+
+        partial_widgets = {
+            "LogVerbose": mock.MagicMock(get_active=lambda: True),
+            "LogSyslog": mock.MagicMock(get_active=lambda: False),
+        }
+
+        result = DatabasePage.collect_data(partial_widgets)
+
+        assert result["LogVerbose"] == "yes"
+        assert result["LogSyslog"] == "no"
+        assert "Checks" not in result
+        assert "DatabaseDirectory" not in result
+
+    def test_collect_data_skips_invalid_numeric_values(self, mock_gi_modules, mock_widgets):
+        """Test collect_data ignores invalid numeric values instead of raising."""
+        from src.ui.preferences.database_page import DatabasePage
+
+        mock_widgets["Checks"].get_value.return_value = "invalid"
+        mock_widgets["HTTPProxyPort"].get_value.return_value = "not-a-number"
+
+        result = DatabasePage.collect_data(mock_widgets)
+
+        assert "Checks" not in result
+        assert "HTTPProxyPort" not in result
+
 
 class TestDatabasePageHelper:
     """Tests for _DatabasePageHelper class."""

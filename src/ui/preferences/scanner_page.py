@@ -34,6 +34,9 @@ from .base import (
     create_navigation_row,
     create_spin_row,
     create_status_row,
+    get_widget_active,
+    get_widget_int_value,
+    get_widget_text,
     populate_bool_field,
     populate_int_field,
     populate_text_field,
@@ -772,26 +775,26 @@ class ScannerPage(PreferencesPageMixin):
         updates = {}
 
         # Collect file type scanning settings
-        updates["ScanPE"] = "yes" if widgets_dict["ScanPE"].get_active() else "no"
-        updates["ScanELF"] = "yes" if widgets_dict["ScanELF"].get_active() else "no"
-        updates["ScanOLE2"] = "yes" if widgets_dict["ScanOLE2"].get_active() else "no"
-        updates["ScanPDF"] = "yes" if widgets_dict["ScanPDF"].get_active() else "no"
-        updates["ScanHTML"] = "yes" if widgets_dict["ScanHTML"].get_active() else "no"
-        updates["ScanArchive"] = "yes" if widgets_dict["ScanArchive"].get_active() else "no"
+        for key in ("ScanPE", "ScanELF", "ScanOLE2", "ScanPDF", "ScanHTML", "ScanArchive"):
+            value = get_widget_active(widgets_dict, key)
+            if value is not None:
+                updates[key] = "yes" if value else "no"
 
         # Collect performance settings
-        updates["MaxFileSize"] = str(int(widgets_dict["MaxFileSize"].get_value()))
-        updates["MaxScanSize"] = str(int(widgets_dict["MaxScanSize"].get_value()))
-        updates["MaxRecursion"] = str(int(widgets_dict["MaxRecursion"].get_value()))
-        updates["MaxFiles"] = str(int(widgets_dict["MaxFiles"].get_value()))
+        for key in ("MaxFileSize", "MaxScanSize", "MaxRecursion", "MaxFiles"):
+            value = get_widget_int_value(widgets_dict, key)
+            if value is not None:
+                updates[key] = str(value)
 
         # Collect logging settings
-        log_file = widgets_dict["LogFile"].get_text()
+        log_file = get_widget_text(widgets_dict, "LogFile")
         if log_file:
             updates["LogFile"] = log_file
 
-        updates["LogVerbose"] = "yes" if widgets_dict["LogVerbose"].get_active() else "no"
-        updates["LogSyslog"] = "yes" if widgets_dict["LogSyslog"].get_active() else "no"
+        for key in ("LogVerbose", "LogSyslog"):
+            value = get_widget_active(widgets_dict, key)
+            if value is not None:
+                updates[key] = "yes" if value else "no"
 
         return updates
 

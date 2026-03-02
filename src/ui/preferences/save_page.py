@@ -409,13 +409,13 @@ class SavePage(PreferencesPageMixin):
                 # Enable or disable scheduler based on settings
                 if scheduled_updates.get("scheduled_scans_enabled"):
                     success, error = self._scheduler.enable_schedule(
-                        frequency=scheduled_updates["schedule_frequency"],
-                        time=scheduled_updates["schedule_time"],
-                        targets=scheduled_updates["schedule_targets"],
-                        day_of_week=scheduled_updates["schedule_day_of_week"],
-                        day_of_month=scheduled_updates["schedule_day_of_month"],
-                        skip_on_battery=scheduled_updates["schedule_skip_on_battery"],
-                        auto_quarantine=scheduled_updates["schedule_auto_quarantine"],
+                        frequency=scheduled_updates.get("schedule_frequency", "daily"),
+                        time=scheduled_updates.get("schedule_time", "02:00"),
+                        targets=scheduled_updates.get("schedule_targets", []),
+                        day_of_week=scheduled_updates.get("schedule_day_of_week", 0),
+                        day_of_month=scheduled_updates.get("schedule_day_of_month", 1),
+                        skip_on_battery=scheduled_updates.get("schedule_skip_on_battery", True),
+                        auto_quarantine=scheduled_updates.get("schedule_auto_quarantine", False),
                     )
                     if not success:
                         raise Exception(f"Failed to enable scheduled scans: {error}")

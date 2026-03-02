@@ -247,6 +247,170 @@ def create_spin_row(
     return row, spin_button
 
 
+def _get_widget_method(widgets_dict: dict, key: str, method_name: str):
+    """
+    Get a callable widget method safely.
+
+    Args:
+        widgets_dict: Dictionary containing widget references
+        key: Widget key in dictionary
+        method_name: Method name to look up on the widget
+
+    Returns:
+        Callable widget method, or None if missing/invalid
+    """
+    widget = widgets_dict.get(key)
+    if widget is None:
+        logger.warning("Missing preferences widget for key: %s", key)
+        return None
+
+    method = getattr(widget, method_name, None)
+    if not callable(method):
+        logger.warning("Widget '%s' does not support method '%s'", key, method_name)
+        return None
+
+    return method
+
+
+def _call_widget_method(widgets_dict: dict, key: str, method_name: str):
+    """
+    Call a widget method safely.
+
+    Returns:
+        Method return value, or None if widget/method is unavailable or call fails
+    """
+    method = _get_widget_method(widgets_dict, key, method_name)
+    if method is None:
+        return None
+
+    try:
+        return method()
+    except Exception:
+        logger.warning("Failed calling %s() on widget '%s'", method_name, key, exc_info=True)
+        return None
+
+
+def _set_widget_method(widgets_dict: dict, key: str, method_name: str, value) -> bool:
+    """
+    Set widget state safely.
+
+    Returns:
+        True if the setter method was called successfully, False otherwise
+    """
+    method = _get_widget_method(widgets_dict, key, method_name)
+    if method is None:
+        return False
+
+    try:
+        method(value)
+    except Exception:
+        logger.warning("Failed calling %s() on widget '%s'", method_name, key, exc_info=True)
+        return False
+
+    return True
+
+
+def get_widget_text(widgets_dict: dict, key: str, strip: bool = False) -> str | None:
+    """
+    Read text from a widget safely.
+
+    Args:
+        widgets_dict: Dictionary containing widget references
+        key: Widget key in dictionary
+        strip: Whether to strip leading/trailing whitespace
+
+    Returns:
+        Text value, or None if unavailable
+    """
+    value = _call_widget_method(widgets_dict, key, "get_text")
+    if value is None:
+        return None
+
+    text = value if isinstance(value, str) else str(value)
+    return text.strip() if strip else text
+
+
+def get_widget_active(widgets_dict: dict, key: str) -> bool | None:
+    """
+    Read active state from a switch widget safely.
+
+    Args:
+        widgets_dict: Dictionary containing widget references
+        key: Widget key in dictionary
+
+    Returns:
+        Boolean active state, or None if unavailable
+    """
+    value = _call_widget_method(widgets_dict, key, "get_active")
+    if value is None:
+        return None
+    return bool(value)
+
+
+def get_widget_selected(widgets_dict: dict, key: str) -> int | None:
+    """
+    Read selected index from a combo widget safely.
+
+    Args:
+        widgets_dict: Dictionary containing widget references
+        key: Widget key in dictionary
+
+    Returns:
+        Selected index as int, or None if unavailable/invalid
+    """
+    value = _call_widget_method(widgets_dict, key, "get_selected")
+    if value is None:
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Invalid selected value for widget '%s': %r", key, value)
+        return None
+
+
+def get_widget_int_value(widgets_dict: dict, key: str) -> int | None:
+    """
+    Read numeric value from a spin widget safely and convert to int.
+
+    Args:
+        widgets_dict: Dictionary containing widget references
+        key: Widget key in dictionary
+
+    Returns:
+        Integer value, or None if unavailable/invalid
+    """
+    value = _call_widget_method(widgets_dict, key, "get_value")
+    if value is None:
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        logger.warning("Invalid numeric value for widget '%s': %r", key, value)
+        return None
+
+
+def set_widget_active(widgets_dict: dict, key: str, value: bool) -> bool:
+    """Safely call set_active on a widget."""
+    return _set_widget_method(widgets_dict, key, "set_active", bool(value))
+
+
+def set_widget_selected(widgets_dict: dict, key: str, value: int) -> bool:
+    """Safely call set_selected on a widget."""
+    return _set_widget_method(widgets_dict, key, "set_selected", int(value))
+
+
+def set_widget_value(widgets_dict: dict, key: str, value: int | float) -> bool:
+    """Safely call set_value on a widget."""
+    return _set_widget_method(widgets_dict, key, "set_value", value)
+
+
+def set_widget_text(widgets_dict: dict, key: str, value: str) -> bool:
+    """Safely call set_text on a widget."""
+    return _set_widget_method(widgets_dict, key, "set_text", value)
+
+
 def populate_bool_field(config, widgets_dict: dict, key: str, default: bool = False) -> None:
     """
     Populate a boolean switch widget from config.
@@ -260,10 +424,10 @@ def populate_bool_field(config, widgets_dict: dict, key: str, default: bool = Fa
     if config.has_key(key):
         value = config.get_value(key)
         is_yes = value.lower() == "yes" if value else False
-        widgets_dict[key].set_active(is_yes)
+        set_widget_active(widgets_dict, key, is_yes)
     else:
         # Key missing - use default value
-        widgets_dict[key].set_active(default)
+        set_widget_active(widgets_dict, key, default)
 
 
 def populate_int_field(config, widgets_dict: dict, key: str) -> None:
@@ -277,7 +441,7 @@ def populate_int_field(config, widgets_dict: dict, key: str) -> None:
     """
     if config.has_key(key):
         try:
-            widgets_dict[key].set_value(int(config.get_value(key)))
+            set_widget_value(widgets_dict, key, int(config.get_value(key)))
         except (ValueError, TypeError):
             pass
 
@@ -292,7 +456,9 @@ def populate_text_field(config, widgets_dict: dict, key: str) -> None:
         key: Config key name (widget key must match)
     """
     if config.has_key(key):
-        widgets_dict[key].set_text(config.get_value(key))
+        value = config.get_value(key)
+        if value is not None:
+            set_widget_text(widgets_dict, key, value)
 
 
 def populate_multivalue_field(config, widgets_dict: dict, key: str, separator: str = ", ") -> None:
@@ -308,7 +474,7 @@ def populate_multivalue_field(config, widgets_dict: dict, key: str, separator: s
     if config.has_key(key):
         values = config.get_values(key)
         if values:
-            widgets_dict[key].set_text(separator.join(values))
+            set_widget_text(widgets_dict, key, separator.join(values))
 
 
 class PreferencesPageMixin:

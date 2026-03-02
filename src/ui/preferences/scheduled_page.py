@@ -20,7 +20,19 @@ from gi.repository import Adw, Gtk
 from ...core.i18n import N_, _
 from ..compat import create_entry_row, create_switch_row
 from ..utils import resolve_icon_name
-from .base import PreferencesPageMixin, create_spin_row, styled_prefix_icon
+from .base import (
+    PreferencesPageMixin,
+    create_spin_row,
+    get_widget_active,
+    get_widget_int_value,
+    get_widget_selected,
+    get_widget_text,
+    set_widget_active,
+    set_widget_selected,
+    set_widget_text,
+    set_widget_value,
+    styled_prefix_icon,
+)
 
 
 class ScheduledPage(PreferencesPageMixin):
@@ -193,34 +205,42 @@ class ScheduledPage(PreferencesPageMixin):
             config = {}
 
         # Enable/disable switch
-        widgets_dict["enabled"].set_active(config.get("scheduled_scans_enabled", False))
+        set_widget_active(widgets_dict, "enabled", config.get("scheduled_scans_enabled", False))
 
         # Frequency dropdown
         freq = config.get("schedule_frequency", "daily")
         freq_map = {"hourly": 0, "daily": 1, "weekly": 2, "monthly": 3}
-        widgets_dict["frequency"].set_selected(freq_map.get(freq, 1))
+        set_widget_selected(widgets_dict, "frequency", freq_map.get(freq, 1))
 
         # Time entry
-        widgets_dict["time"].set_text(config.get("schedule_time", "02:00"))
+        set_widget_text(widgets_dict, "time", config.get("schedule_time", "02:00"))
 
         # Targets entry
         targets = config.get("schedule_targets", [])
         if targets:
-            widgets_dict["targets"].set_text(", ".join(targets))
+            set_widget_text(widgets_dict, "targets", ", ".join(targets))
         else:
-            widgets_dict["targets"].set_text(str(Path.home()))
+            set_widget_text(widgets_dict, "targets", str(Path.home()))
 
         # Day of week dropdown
-        widgets_dict["day_of_week"].set_selected(config.get("schedule_day_of_week", 0))
+        set_widget_selected(widgets_dict, "day_of_week", config.get("schedule_day_of_week", 0))
 
         # Day of month spinner
-        widgets_dict["day_of_month"].set_value(config.get("schedule_day_of_month", 1))
+        set_widget_value(widgets_dict, "day_of_month", config.get("schedule_day_of_month", 1))
 
         # Skip on battery switch
-        widgets_dict["skip_on_battery"].set_active(config.get("schedule_skip_on_battery", True))
+        set_widget_active(
+            widgets_dict,
+            "skip_on_battery",
+            config.get("schedule_skip_on_battery", True),
+        )
 
         # Auto-quarantine switch
-        widgets_dict["auto_quarantine"].set_active(config.get("schedule_auto_quarantine", False))
+        set_widget_active(
+            widgets_dict,
+            "auto_quarantine",
+            config.get("schedule_auto_quarantine", False),
+        )
 
     @staticmethod
     def collect_data(widgets_dict: dict) -> dict:
@@ -237,23 +257,45 @@ class ScheduledPage(PreferencesPageMixin):
             Dictionary of scheduled scan settings to save
         """
         frequency_map = ["hourly", "daily", "weekly", "monthly"]
-        selected_frequency = widgets_dict["frequency"].get_selected()
+        selected_frequency = get_widget_selected(widgets_dict, "frequency")
+        if selected_frequency is None or selected_frequency >= len(frequency_map):
+            selected_frequency = 1
 
         # Parse targets from comma-separated string
-        targets_text = widgets_dict["targets"].get_text()
+        targets_text = get_widget_text(widgets_dict, "targets") or ""
         targets = [t.strip() for t in targets_text.split(",") if t.strip()]
 
+        enabled = get_widget_active(widgets_dict, "enabled")
+        if enabled is None:
+            enabled = False
+
+        time_text = get_widget_text(widgets_dict, "time", strip=True)
+        if not time_text:
+            time_text = "02:00"
+
+        day_of_week = get_widget_selected(widgets_dict, "day_of_week")
+        if day_of_week is None:
+            day_of_week = 0
+
+        day_of_month = get_widget_int_value(widgets_dict, "day_of_month")
+        if day_of_month is None:
+            day_of_month = 1
+
+        skip_on_battery = get_widget_active(widgets_dict, "skip_on_battery")
+        if skip_on_battery is None:
+            skip_on_battery = True
+
+        auto_quarantine = get_widget_active(widgets_dict, "auto_quarantine")
+        if auto_quarantine is None:
+            auto_quarantine = False
+
         return {
-            "scheduled_scans_enabled": widgets_dict["enabled"].get_active(),
-            "schedule_frequency": (
-                frequency_map[selected_frequency]
-                if selected_frequency < len(frequency_map)
-                else "daily"
-            ),
-            "schedule_time": widgets_dict["time"].get_text().strip() or "02:00",
+            "scheduled_scans_enabled": enabled,
+            "schedule_frequency": frequency_map[selected_frequency],
+            "schedule_time": time_text,
             "schedule_targets": targets,
-            "schedule_day_of_week": widgets_dict["day_of_week"].get_selected(),
-            "schedule_day_of_month": int(widgets_dict["day_of_month"].get_value()),
-            "schedule_skip_on_battery": widgets_dict["skip_on_battery"].get_active(),
-            "schedule_auto_quarantine": widgets_dict["auto_quarantine"].get_active(),
+            "schedule_day_of_week": day_of_week,
+            "schedule_day_of_month": day_of_month,
+            "schedule_skip_on_battery": skip_on_battery,
+            "schedule_auto_quarantine": auto_quarantine,
         }

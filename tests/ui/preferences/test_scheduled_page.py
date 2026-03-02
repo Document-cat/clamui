@@ -360,6 +360,20 @@ class TestScheduledPagePopulateFields:
         widgets_dict["skip_on_battery"].set_active.assert_called_with(False)
         widgets_dict["auto_quarantine"].set_active.assert_called_with(True)
 
+    def test_populate_fields_handles_missing_widgets(self, mock_gi_modules):
+        """Test populate_fields does not crash when widgets are missing."""
+        from src.ui.preferences.scheduled_page import ScheduledPage
+
+        config = {
+            "scheduled_scans_enabled": True,
+            "schedule_frequency": "weekly",
+            "schedule_time": "03:30",
+            "schedule_targets": ["/home/user/Documents"],
+        }
+
+        # Should not raise with an incomplete widget dictionary
+        ScheduledPage.populate_fields(config, {})
+
 
 class TestScheduledPageCollectData:
     """Tests for ScheduledPage.collect_data() method."""
@@ -595,3 +609,32 @@ class TestScheduledPageCollectData:
 
         for key in required_keys:
             assert key in result, f"Required key {key} not in result"
+
+    def test_collect_data_handles_missing_widgets_with_defaults(self, mock_gi_modules):
+        """Test collect_data returns safe defaults when widgets are missing."""
+        from src.ui.preferences.scheduled_page import ScheduledPage
+
+        result = ScheduledPage.collect_data({})
+
+        assert result == {
+            "scheduled_scans_enabled": False,
+            "schedule_frequency": "daily",
+            "schedule_time": "02:00",
+            "schedule_targets": [],
+            "schedule_day_of_week": 0,
+            "schedule_day_of_month": 1,
+            "schedule_skip_on_battery": True,
+            "schedule_auto_quarantine": False,
+        }
+
+    def test_collect_data_handles_invalid_numeric_values(self, mock_gi_modules, widgets_dict):
+        """Test collect_data falls back to defaults on invalid numeric values."""
+        from src.ui.preferences.scheduled_page import ScheduledPage
+
+        widgets_dict["frequency"].get_selected = lambda: "invalid"
+        widgets_dict["day_of_month"].get_value = lambda: "not-a-number"
+
+        result = ScheduledPage.collect_data(widgets_dict)
+
+        assert result["schedule_frequency"] == "daily"
+        assert result["schedule_day_of_month"] == 1

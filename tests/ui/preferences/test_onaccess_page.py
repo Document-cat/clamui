@@ -511,6 +511,34 @@ class TestOnAccessPageCollectData:
         assert "OnAccessCurlTimeout" in result
         assert "OnAccessRetryAttempts" in result
 
+    def test_collect_data_skips_missing_widgets_without_crashing(self, mock_gi_modules):
+        """Test collect_data handles missing widget keys safely."""
+        from src.ui.preferences.onaccess_page import OnAccessPage
+
+        partial_widgets = {
+            "OnAccessPrevention": mock.MagicMock(get_active=lambda: True),
+            "OnAccessExcludeRootUID": mock.MagicMock(get_active=lambda: False),
+        }
+
+        result = OnAccessPage.collect_data(partial_widgets, True)
+
+        assert result["OnAccessPrevention"] == "yes"
+        assert result["OnAccessExcludeRootUID"] == "no"
+        assert "OnAccessMaxThreads" not in result
+        assert "OnAccessIncludePath" not in result
+
+    def test_collect_data_skips_invalid_numeric_values(self, mock_gi_modules, mock_widgets):
+        """Test collect_data ignores invalid numeric values instead of raising."""
+        from src.ui.preferences.onaccess_page import OnAccessPage
+
+        mock_widgets["OnAccessMaxThreads"].get_value.return_value = "invalid"
+        mock_widgets["OnAccessExcludeUID"].get_value.return_value = "bad"
+
+        result = OnAccessPage.collect_data(mock_widgets, True)
+
+        assert "OnAccessMaxThreads" not in result
+        assert "OnAccessExcludeUID" not in result
+
 
 class TestOnAccessPageHelper:
     """Tests for _OnAccessPageHelper class."""

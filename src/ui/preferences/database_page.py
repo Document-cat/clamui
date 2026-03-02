@@ -29,6 +29,9 @@ from ..compat import create_entry_row, create_switch_row
 from ..utils import resolve_icon_name
 from .base import (
     PreferencesPageMixin,
+    get_widget_active,
+    get_widget_int_value,
+    get_widget_text,
     populate_bool_field,
     populate_int_field,
     populate_text_field,
@@ -785,49 +788,54 @@ class DatabasePage(PreferencesPageMixin):
         updates = {}
 
         # Collect DatabaseDirectory
-        db_dir = widgets_dict["DatabaseDirectory"].get_text()
+        db_dir = get_widget_text(widgets_dict, "DatabaseDirectory")
         if db_dir:
             updates["DatabaseDirectory"] = db_dir
 
         # Collect UpdateLogFile
-        log_file = widgets_dict["UpdateLogFile"].get_text()
+        log_file = get_widget_text(widgets_dict, "UpdateLogFile")
         if log_file:
             updates["UpdateLogFile"] = log_file
 
         # Collect NotifyClamd
-        notify_clamd = widgets_dict["NotifyClamd"].get_text()
+        notify_clamd = get_widget_text(widgets_dict, "NotifyClamd")
         if notify_clamd:
             updates["NotifyClamd"] = notify_clamd
 
         # Collect LogVerbose
-        updates["LogVerbose"] = "yes" if widgets_dict["LogVerbose"].get_active() else "no"
+        log_verbose = get_widget_active(widgets_dict, "LogVerbose")
+        if log_verbose is not None:
+            updates["LogVerbose"] = "yes" if log_verbose else "no"
 
         # Collect LogSyslog
-        updates["LogSyslog"] = "yes" if widgets_dict["LogSyslog"].get_active() else "no"
+        log_syslog = get_widget_active(widgets_dict, "LogSyslog")
+        if log_syslog is not None:
+            updates["LogSyslog"] = "yes" if log_syslog else "no"
 
         # Collect Checks
-        checks_value = int(widgets_dict["Checks"].get_value())
-        updates["Checks"] = str(checks_value)
+        checks_value = get_widget_int_value(widgets_dict, "Checks")
+        if checks_value is not None:
+            updates["Checks"] = str(checks_value)
 
         # Collect DatabaseMirror
-        mirror = widgets_dict["DatabaseMirror"].get_text()
+        mirror = get_widget_text(widgets_dict, "DatabaseMirror")
         if mirror:
             updates["DatabaseMirror"] = mirror
 
         # Collect proxy settings
-        proxy_server = widgets_dict["HTTPProxyServer"].get_text()
+        proxy_server = get_widget_text(widgets_dict, "HTTPProxyServer")
         if proxy_server:
             updates["HTTPProxyServer"] = proxy_server
 
-        proxy_port = int(widgets_dict["HTTPProxyPort"].get_value())
-        if proxy_port > 0:
+        proxy_port = get_widget_int_value(widgets_dict, "HTTPProxyPort")
+        if proxy_port is not None and proxy_port > 0:
             updates["HTTPProxyPort"] = str(proxy_port)
 
-        proxy_user = widgets_dict["HTTPProxyUsername"].get_text()
+        proxy_user = get_widget_text(widgets_dict, "HTTPProxyUsername")
         if proxy_user:
             updates["HTTPProxyUsername"] = proxy_user
 
-        proxy_pass = widgets_dict["HTTPProxyPassword"].get_text()
+        proxy_pass = get_widget_text(widgets_dict, "HTTPProxyPassword")
         if proxy_pass:
             updates["HTTPProxyPassword"] = proxy_pass
 

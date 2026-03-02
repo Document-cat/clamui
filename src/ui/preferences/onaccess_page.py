@@ -22,6 +22,9 @@ from ..utils import resolve_icon_name
 from .base import (
     PreferencesPageMixin,
     create_spin_row,
+    get_widget_active,
+    get_widget_int_value,
+    get_widget_text,
     populate_bool_field,
     populate_int_field,
     populate_multivalue_field,
@@ -391,50 +394,50 @@ class OnAccessPage(PreferencesPageMixin):
         updates = {}
 
         # Collect path settings (comma-separated entries become multiple values)
-        include_path = widgets_dict["OnAccessIncludePath"].get_text().strip()
+        include_path = get_widget_text(widgets_dict, "OnAccessIncludePath", strip=True)
         if include_path:
             # Split comma-separated paths and store as list for multi-value config
             updates["OnAccessIncludePath"] = [
                 p.strip() for p in include_path.split(",") if p.strip()
             ]
 
-        exclude_path = widgets_dict["OnAccessExcludePath"].get_text().strip()
+        exclude_path = get_widget_text(widgets_dict, "OnAccessExcludePath", strip=True)
         if exclude_path:
             updates["OnAccessExcludePath"] = [
                 p.strip() for p in exclude_path.split(",") if p.strip()
             ]
 
         # Collect behavior switches
-        updates["OnAccessPrevention"] = (
-            "yes" if widgets_dict["OnAccessPrevention"].get_active() else "no"
-        )
-        updates["OnAccessExtraScanning"] = (
-            "yes" if widgets_dict["OnAccessExtraScanning"].get_active() else "no"
-        )
-        updates["OnAccessDenyOnError"] = (
-            "yes" if widgets_dict["OnAccessDenyOnError"].get_active() else "no"
-        )
-        updates["OnAccessDisableDDD"] = (
-            "yes" if widgets_dict["OnAccessDisableDDD"].get_active() else "no"
-        )
+        for key in (
+            "OnAccessPrevention",
+            "OnAccessExtraScanning",
+            "OnAccessDenyOnError",
+            "OnAccessDisableDDD",
+        ):
+            value = get_widget_active(widgets_dict, key)
+            if value is not None:
+                updates[key] = "yes" if value else "no"
 
         # Collect performance settings (spin rows)
-        updates["OnAccessMaxThreads"] = str(int(widgets_dict["OnAccessMaxThreads"].get_value()))
-        updates["OnAccessMaxFileSize"] = str(int(widgets_dict["OnAccessMaxFileSize"].get_value()))
-        updates["OnAccessCurlTimeout"] = str(int(widgets_dict["OnAccessCurlTimeout"].get_value()))
-        updates["OnAccessRetryAttempts"] = str(
-            int(widgets_dict["OnAccessRetryAttempts"].get_value())
-        )
+        for key in (
+            "OnAccessMaxThreads",
+            "OnAccessMaxFileSize",
+            "OnAccessCurlTimeout",
+            "OnAccessRetryAttempts",
+            "OnAccessExcludeUID",
+        ):
+            value = get_widget_int_value(widgets_dict, key)
+            if value is not None:
+                updates[key] = str(value)
 
         # Collect user exclusion settings
-        exclude_uname = widgets_dict["OnAccessExcludeUname"].get_text().strip()
+        exclude_uname = get_widget_text(widgets_dict, "OnAccessExcludeUname", strip=True)
         if exclude_uname:
             updates["OnAccessExcludeUname"] = exclude_uname
 
-        updates["OnAccessExcludeUID"] = str(int(widgets_dict["OnAccessExcludeUID"].get_value()))
-        updates["OnAccessExcludeRootUID"] = (
-            "yes" if widgets_dict["OnAccessExcludeRootUID"].get_active() else "no"
-        )
+        exclude_root_uid = get_widget_active(widgets_dict, "OnAccessExcludeRootUID")
+        if exclude_root_uid is not None:
+            updates["OnAccessExcludeRootUID"] = "yes" if exclude_root_uid else "no"
 
         return updates
 

@@ -1035,6 +1035,34 @@ class TestScannerPageCollectData:
         assert "MaxRecursion" in result
         assert "MaxFiles" in result
 
+    def test_collect_data_skips_missing_widgets_without_crashing(self, mock_gi_modules):
+        """Test collect_data handles missing widget keys safely."""
+        from src.ui.preferences.scanner_page import ScannerPage
+
+        partial_widgets = {
+            "ScanPE": mock.MagicMock(get_active=lambda: True),
+            "LogVerbose": mock.MagicMock(get_active=lambda: False),
+        }
+
+        result = ScannerPage.collect_data(partial_widgets, True)
+
+        assert result["ScanPE"] == "yes"
+        assert result["LogVerbose"] == "no"
+        assert "MaxFileSize" not in result
+        assert "LogFile" not in result
+
+    def test_collect_data_skips_invalid_numeric_values(self, mock_gi_modules, mock_widgets):
+        """Test collect_data ignores invalid numeric values instead of raising."""
+        from src.ui.preferences.scanner_page import ScannerPage
+
+        mock_widgets["MaxFileSize"].get_value.return_value = "invalid"
+        mock_widgets["MaxFiles"].get_value.return_value = None
+
+        result = ScannerPage.collect_data(mock_widgets, True)
+
+        assert "MaxFileSize" not in result
+        assert "MaxFiles" not in result
+
 
 class TestScannerPageHelper:
     """Tests for _ScannerPageHelper class."""
