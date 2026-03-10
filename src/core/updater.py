@@ -140,6 +140,7 @@ class FreshclamUpdater:
         """
         self._current_process: subprocess.Popen | None = None
         self._update_cancelled = False
+        self._force_update_backup_dir: Path | None = None
         self._log_manager = log_manager if log_manager else LogManager()
 
     def check_available(self) -> tuple[bool, str | None]:
@@ -334,6 +335,288 @@ class FreshclamUpdater:
             pass  # Best-effort check; proceed with update if anything goes wrong
         return False, None
 
+    def _create_result(
+        self,
+        status: UpdateStatus,
+        *,
+        stdout: str = "",
+        stderr: str = "",
+        exit_code: int = -1,
+        databases_updated: int = 0,
+        error_message: str | None = None,
+        update_method: UpdateMethod = UpdateMethod.MANUAL,
+    ) -> UpdateResult:
+        """Build a basic update result for non-parser-driven branches."""
+        return UpdateResult(
+            status=status,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+            databases_updated=databases_updated,
+            error_message=error_message,
+            update_method=update_method,
+        )
+
+    def _finish_update(
+        self,
+        result: UpdateResult,
+        start_time: float,
+        *,
+        restore_backup: bool = False,
+    ) -> UpdateResult:
+        """Persist the update log, optionally restore backups, and return the result."""
+        if restore_backup:
+            self._restore_databases_from_backup()
+
+        duration = time.monotonic() - start_time
+        self._save_update_log(result, duration)
+        self._cleanup_backup()
+        return result
+
+    def _check_availability_result(self) -> UpdateResult | None:
+        """Return an error result when freshclam is unavailable."""
+        is_installed, version_or_error = check_freshclam_installed()
+        if is_installed:
+            return None
+
+        return self._create_result(
+            UpdateStatus.ERROR,
+            stderr=version_or_error or "freshclam not installed",
+            error_message=version_or_error,
+        )
+
+    def _try_service_update_result(
+        self, *, force: bool, prefer_service: bool
+    ) -> UpdateResult | None:
+        """Try the service-triggered update path and return a finished result if used."""
+        if force or not prefer_service:
+            return None
+
+        service_status, _service_pid = self.check_freshclam_service()
+        if service_status != FreshclamServiceStatus.RUNNING:
+            return None
+
+        success, message = self.trigger_service_update()
+        if success:
+            return self._create_result(
+                UpdateStatus.SUCCESS,
+                stdout=message,
+                exit_code=0,
+                update_method=UpdateMethod.SERVICE_SIGNAL,
+            )
+
+        logger.warning(
+            "Service update trigger failed (%s), "
+            "not falling back to manual method (service holds locks)",
+            message,
+        )
+        return self._create_result(
+            UpdateStatus.ERROR,
+            stderr=message,
+            error_message=_(
+                "Could not trigger freshclam service update. "
+                "Try restarting the service: "
+                "sudo systemctl restart clamav-freshclam"
+            ),
+        )
+
+    def _prepare_force_update_result(self, *, force: bool) -> UpdateResult | None:
+        """Handle backup/delete steps required before a forced manual update."""
+        if not force:
+            return None
+
+        success, error, _ = self._backup_local_databases()
+        if not is_flatpak():
+            if not success:
+                logger.warning(
+                    "Could not backup databases in native mode "
+                    "(expected for root-owned directory): %s",
+                    error,
+                )
+                self._cleanup_backup()
+            return None
+
+        if not success:
+            return self._create_result(
+                UpdateStatus.ERROR,
+                stderr=error or "",
+                error_message=error or _("Backup failed"),
+            )
+
+        success, error, deleted_count = self._delete_local_databases()
+        if not success:
+            self._restore_databases_from_backup()
+            return self._create_result(
+                UpdateStatus.ERROR,
+                stderr=error or "",
+                error_message=error or _("Delete failed"),
+            )
+
+        logger.info("Deleted %d database file(s) before force update", deleted_count)
+        return None
+
+    def _get_running_instance_result(self) -> UpdateResult | None:
+        """Return an error result when another freshclam instance is active."""
+        is_running, running_pid = self._check_freshclam_running()
+        if not (is_running and running_pid):
+            return None
+
+        logger.warning(
+            "Another freshclam instance running (PID %s), aborting manual update",
+            running_pid,
+        )
+        return self._create_result(
+            UpdateStatus.ERROR,
+            error_message=_(
+                "Another freshclam instance is running (PID {pid}). "
+                "Stop it first: sudo systemctl stop clamav-freshclam"
+            ).format(pid=running_pid),
+        )
+
+    @staticmethod
+    def _decode_timeout_stream(stream: bytes | str | None) -> str:
+        """Normalize TimeoutExpired stdout/stderr values to text."""
+        if not stream:
+            return ""
+        if isinstance(stream, str):
+            return stream
+        return stream.decode("utf-8", errors="replace")
+
+    def _collect_timeout_output(
+        self,
+        process: subprocess.Popen,
+        timeout_error: subprocess.TimeoutExpired,
+    ) -> tuple[str, str]:
+        """Collect partial subprocess output after a communicate timeout."""
+        partial_stdout = self._decode_timeout_stream(timeout_error.stdout)
+        partial_stderr = self._decode_timeout_stream(timeout_error.stderr)
+
+        try:
+            remaining_stdout, remaining_stderr = process.communicate(timeout=_KILL_WAIT_TIMEOUT)
+            return partial_stdout + (remaining_stdout or ""), partial_stderr + (
+                remaining_stderr or ""
+            )
+        except subprocess.TimeoutExpired:
+            return partial_stdout, partial_stderr
+
+    def _cleanup_current_process(self) -> None:
+        """Clear the active process handle and ensure the process is no longer running."""
+        process = self._current_process
+        if process is None:
+            return
+
+        self._current_process = None
+        try:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=_KILL_WAIT_TIMEOUT)
+        except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+            pass
+
+    def _run_update_process(self, cmd: list[str]) -> tuple[str, str, int, bool]:
+        """Execute the freshclam subprocess and return its output and timeout state."""
+        self._update_cancelled = False
+        self._current_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=get_clean_env(),
+        )
+
+        timed_out = False
+        stdout = ""
+        stderr = ""
+        exit_code = -1
+
+        try:
+            stdout, stderr = self._current_process.communicate(timeout=_UPDATE_COMMUNICATE_TIMEOUT)
+            exit_code = self._current_process.returncode
+        except subprocess.TimeoutExpired as e:
+            logger.warning("Update process timed out, killing")
+            timed_out = True
+            self._current_process.kill()
+            stdout, stderr = self._collect_timeout_output(self._current_process, e)
+        finally:
+            self._cleanup_current_process()
+
+        return stdout, stderr, exit_code, timed_out
+
+    def _run_manual_update(self, *, force: bool, start_time: float) -> UpdateResult:
+        """Execute the manual freshclam path once preconditions have passed."""
+        flatpak_force = force and is_flatpak()
+        running_result = self._get_running_instance_result()
+        if running_result is not None:
+            return self._finish_update(running_result, start_time)
+
+        cmd = self._build_command(force=force)
+
+        try:
+            stdout, stderr, exit_code, timed_out = self._run_update_process(cmd)
+        except FileNotFoundError:
+            return self._finish_update(
+                self._create_result(
+                    UpdateStatus.ERROR,
+                    stderr="freshclam executable not found",
+                    error_message=_("freshclam executable not found"),
+                ),
+                start_time,
+                restore_backup=flatpak_force,
+            )
+        except PermissionError as e:
+            return self._finish_update(
+                self._create_result(
+                    UpdateStatus.ERROR,
+                    stderr=str(e),
+                    error_message=_("Permission denied: {error}").format(error=e),
+                ),
+                start_time,
+                restore_backup=flatpak_force,
+            )
+        except Exception as e:
+            return self._finish_update(
+                self._create_result(
+                    UpdateStatus.ERROR,
+                    stderr=str(e),
+                    error_message=_("Update failed: {error}").format(error=e),
+                ),
+                start_time,
+                restore_backup=flatpak_force,
+            )
+
+        if timed_out and not self._update_cancelled:
+            return self._finish_update(
+                self._create_result(
+                    UpdateStatus.ERROR,
+                    stdout=stdout,
+                    stderr=stderr,
+                    error_message=_("Update timed out after 10 minutes"),
+                ),
+                start_time,
+                restore_backup=force,
+            )
+
+        if self._update_cancelled:
+            return self._finish_update(
+                self._create_result(
+                    UpdateStatus.CANCELLED,
+                    stdout=stdout,
+                    stderr=stderr,
+                    exit_code=exit_code,
+                    error_message=_("Update cancelled by user"),
+                ),
+                start_time,
+                restore_backup=flatpak_force,
+            )
+
+        result = self._parse_results(stdout, stderr, exit_code)
+
+        return self._finish_update(
+            result,
+            start_time,
+            restore_backup=flatpak_force and result.status == UpdateStatus.ERROR,
+        )
+
     def update_sync(self, force: bool = False, prefer_service: bool = True) -> UpdateResult:
         """
         Execute a synchronous database update.
@@ -355,300 +638,19 @@ class FreshclamUpdater:
         """
         start_time = time.monotonic()
 
-        # Check freshclam is available first (needed for both service and manual methods)
-        is_installed, version_or_error = check_freshclam_installed()
-        if not is_installed:
-            result = UpdateResult(
-                status=UpdateStatus.ERROR,
-                stdout="",
-                stderr=version_or_error or "freshclam not installed",
-                exit_code=-1,
-                databases_updated=0,
-                error_message=version_or_error,
-            )
-            duration = time.monotonic() - start_time
-            self._save_update_log(result, duration)
-            return result
+        availability_result = self._check_availability_result()
+        if availability_result is not None:
+            return self._finish_update(availability_result, start_time)
 
-        # Try service-based update if preferred and not force mode
-        # Force mode requires deleting databases which needs root privileges
-        if prefer_service and not force:
-            service_status, pid = self.check_freshclam_service()
-            if service_status == FreshclamServiceStatus.RUNNING:
-                success, message = self.trigger_service_update()
-                if success:
-                    # Service update triggered successfully
-                    # Note: The actual update happens in the background
-                    result = UpdateResult(
-                        status=UpdateStatus.SUCCESS,
-                        stdout=message,
-                        stderr="",
-                        exit_code=0,
-                        databases_updated=0,  # Unknown - happens in background
-                        error_message=None,
-                        update_method=UpdateMethod.SERVICE_SIGNAL,
-                    )
-                    duration = time.monotonic() - start_time
-                    self._save_update_log(result, duration)
-                    return result
-                else:
-                    # Service is running but signal failed - do NOT fall back to manual.
-                    # Manual freshclam will fail because the service holds all locks.
-                    logger.warning(
-                        "Service update trigger failed (%s), "
-                        "not falling back to manual method (service holds locks)",
-                        message,
-                    )
-                    result = UpdateResult(
-                        status=UpdateStatus.ERROR,
-                        stdout="",
-                        stderr=message,
-                        exit_code=-1,
-                        databases_updated=0,
-                        error_message=_(
-                            "Could not trigger freshclam service update. "
-                            "Try restarting the service: "
-                            "sudo systemctl restart clamav-freshclam"
-                        ),
-                    )
-                    duration = time.monotonic() - start_time
-                    self._save_update_log(result, duration)
-                    return result
-        # Continue with manual update method
+        service_result = self._try_service_update_result(force=force, prefer_service=prefer_service)
+        if service_result is not None:
+            return self._finish_update(service_result, start_time)
 
-        # If force update, backup existing databases (for potential restore)
-        # Note: In native mode, deletion happens via pkexec in _build_command
-        # In Flatpak mode, deletion happens here with user permissions
-        if force:
-            if not is_flatpak():
-                # Native: best-effort backup (may fail due to root-owned directory)
-                # We continue even if backup fails since deletion is done via pkexec
-                success, error, backed_files = self._backup_local_databases()
-                if not success:
-                    logger.warning(
-                        "Could not backup databases in native mode (expected for root-owned directory): %s",
-                        error,
-                    )
-                    # Clear any partial backup
-                    self._cleanup_backup()
-            else:
-                # Flatpak: backup and delete here (user-writable directory)
-                success, error, backed_files = self._backup_local_databases()
-                if not success:
-                    result = UpdateResult(
-                        status=UpdateStatus.ERROR,
-                        stdout="",
-                        stderr=error or "",
-                        exit_code=-1,
-                        databases_updated=0,
-                        error_message=error or _("Backup failed"),
-                    )
-                    duration = time.monotonic() - start_time
-                    self._save_update_log(result, duration)
-                    return result
+        force_result = self._prepare_force_update_result(force=force)
+        if force_result is not None:
+            return self._finish_update(force_result, start_time)
 
-                # Delete local databases to force fresh download
-                success, error, deleted_count = self._delete_local_databases()
-                if not success:
-                    # Restore from backup and return error
-                    self._restore_databases_from_backup()
-                    self._cleanup_backup()
-                    result = UpdateResult(
-                        status=UpdateStatus.ERROR,
-                        stdout="",
-                        stderr=error or "",
-                        exit_code=-1,
-                        databases_updated=0,
-                        error_message=error or _("Delete failed"),
-                    )
-                    duration = time.monotonic() - start_time
-                    self._save_update_log(result, duration)
-                    return result
-
-                logger.info("Deleted %d database file(s) before force update", deleted_count)
-
-        # Before building manual command, check for running freshclam processes.
-        # Service check may have been skipped (force mode), but a running process
-        # will hold locks and cause the manual method to fail.
-        is_running, running_pid = self._check_freshclam_running()
-        if is_running and running_pid:
-            logger.warning(
-                "Another freshclam instance running (PID %s), aborting manual update",
-                running_pid,
-            )
-            result = UpdateResult(
-                status=UpdateStatus.ERROR,
-                stdout="",
-                stderr="",
-                exit_code=-1,
-                databases_updated=0,
-                error_message=_(
-                    "Another freshclam instance is running (PID {pid}). "
-                    "Stop it first: sudo systemctl stop clamav-freshclam"
-                ).format(pid=running_pid),
-            )
-            duration = time.monotonic() - start_time
-            self._save_update_log(result, duration)
-            return result
-
-        # Build freshclam command
-        cmd = self._build_command(force=force)
-
-        try:
-            self._update_cancelled = False
-            self._current_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=get_clean_env(),
-            )
-
-            timed_out = False
-            try:
-                stdout, stderr = self._current_process.communicate(
-                    timeout=_UPDATE_COMMUNICATE_TIMEOUT
-                )
-                exit_code = self._current_process.returncode
-            except subprocess.TimeoutExpired as e:
-                # Process timed out - capture partial output and kill
-                logger.warning("Update process timed out, killing")
-                timed_out = True
-                self._current_process.kill()
-                # Capture partial output from exception
-                # Note: TimeoutExpired.stdout/stderr are always bytes even with text=True
-                # Must decode before concatenating with string output from communicate()
-                # Handle both bytes (real) and str (test mocks) for robustness
-                if e.stdout:
-                    partial_stdout = (
-                        e.stdout
-                        if isinstance(e.stdout, str)
-                        else e.stdout.decode("utf-8", errors="replace")
-                    )
-                else:
-                    partial_stdout = ""
-                if e.stderr:
-                    partial_stderr = (
-                        e.stderr
-                        if isinstance(e.stderr, str)
-                        else e.stderr.decode("utf-8", errors="replace")
-                    )
-                else:
-                    partial_stderr = ""
-                try:
-                    remaining_stdout, remaining_stderr = self._current_process.communicate(
-                        timeout=_KILL_WAIT_TIMEOUT
-                    )
-                    stdout = partial_stdout + (remaining_stdout or "")
-                    stderr = partial_stderr + (remaining_stderr or "")
-                except subprocess.TimeoutExpired:
-                    stdout = partial_stdout
-                    stderr = partial_stderr
-                exit_code = -1  # Indicate timeout
-            finally:
-                # Ensure process is cleaned up even if communicate() raises
-                process = self._current_process
-                if process is not None:
-                    self._current_process = None  # Clear first to avoid race
-                    try:
-                        if process.poll() is None:  # Only kill if still running
-                            process.kill()
-                        process.wait(timeout=_KILL_WAIT_TIMEOUT)
-                    except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-                        pass
-
-            # Check if timed out (and not cancelled) - treat as error
-            if timed_out and not self._update_cancelled:
-                if force:
-                    self._restore_databases_from_backup()
-                result = UpdateResult(
-                    status=UpdateStatus.ERROR,
-                    stdout=stdout,
-                    stderr=stderr,
-                    exit_code=exit_code,
-                    databases_updated=0,
-                    error_message=_("Update timed out after 10 minutes"),
-                )
-                duration = time.monotonic() - start_time
-                self._save_update_log(result, duration)
-                self._cleanup_backup()
-                return result
-
-            # Check if cancelled during execution
-            if self._update_cancelled:
-                if force and is_flatpak():
-                    self._restore_databases_from_backup()
-                result = UpdateResult(
-                    status=UpdateStatus.CANCELLED,
-                    stdout=stdout,
-                    stderr=stderr,
-                    exit_code=exit_code,
-                    databases_updated=0,
-                    error_message=_("Update cancelled by user"),
-                )
-                duration = time.monotonic() - start_time
-                self._save_update_log(result, duration)
-                self._cleanup_backup()
-                return result
-
-            # Parse the results
-            result = self._parse_results(stdout, stderr, exit_code)
-
-            # On error in Flatpak mode, restore databases from backup
-            # In native mode, restore is skipped (backup was likely not possible)
-            if force and result.status == UpdateStatus.ERROR and is_flatpak():
-                self._restore_databases_from_backup()
-
-            duration = time.monotonic() - start_time
-            self._save_update_log(result, duration)
-            self._cleanup_backup()
-            return result
-
-        except FileNotFoundError:
-            if force and is_flatpak():
-                self._restore_databases_from_backup()
-            result = UpdateResult(
-                status=UpdateStatus.ERROR,
-                stdout="",
-                stderr="freshclam executable not found",
-                exit_code=-1,
-                databases_updated=0,
-                error_message=_("freshclam executable not found"),
-            )
-            duration = time.monotonic() - start_time
-            self._save_update_log(result, duration)
-            self._cleanup_backup()
-            return result
-        except PermissionError as e:
-            if force and is_flatpak():
-                self._restore_databases_from_backup()
-            result = UpdateResult(
-                status=UpdateStatus.ERROR,
-                stdout="",
-                stderr=str(e),
-                exit_code=-1,
-                databases_updated=0,
-                error_message=_("Permission denied: {error}").format(error=e),
-            )
-            duration = time.monotonic() - start_time
-            self._save_update_log(result, duration)
-            self._cleanup_backup()
-            return result
-        except Exception as e:
-            if force and is_flatpak():
-                self._restore_databases_from_backup()
-            result = UpdateResult(
-                status=UpdateStatus.ERROR,
-                stdout="",
-                stderr=str(e),
-                exit_code=-1,
-                databases_updated=0,
-                error_message=_("Update failed: {error}").format(error=e),
-            )
-            duration = time.monotonic() - start_time
-            self._save_update_log(result, duration)
-            self._cleanup_backup()
-            return result
+        return self._run_manual_update(force=force, start_time=start_time)
 
     def update_async(
         self,
@@ -1151,7 +1153,7 @@ class FreshclamUpdater:
         Returns:
             Tuple of (success, error_message)
         """
-        backup_dir = getattr(self, "_force_update_backup_dir", None)
+        backup_dir = self._force_update_backup_dir
         if not backup_dir or not backup_dir.exists():
             return False, "No backup available"
 
@@ -1181,7 +1183,7 @@ class FreshclamUpdater:
 
     def _cleanup_backup(self) -> None:
         """Clean up backup directory."""
-        backup_dir = getattr(self, "_force_update_backup_dir", None)
+        backup_dir = self._force_update_backup_dir
         if backup_dir and backup_dir.exists():
             shutil.rmtree(backup_dir, ignore_errors=True)
             self._force_update_backup_dir = None

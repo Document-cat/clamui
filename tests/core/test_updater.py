@@ -1007,6 +1007,95 @@ class TestFreshclamUpdaterCommunicateTimeout:
                             assert result.status == UpdateStatus.ERROR
                             assert "timed out" in result.error_message.lower()
 
+    def test_force_timeout_restores_backup_in_native_mode(self, updater_module):
+        """Force-update timeouts should restore backups even outside Flatpak."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        UpdateStatus = updater_module["UpdateStatus"]
+        mock_log_manager = MagicMock()
+
+        with patch("src.core.updater.is_flatpak", return_value=False):
+            with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+                updater = FreshclamUpdater(log_manager=mock_log_manager)
+                with patch.object(
+                    updater,
+                    "_backup_local_databases",
+                    return_value=(True, None, []),
+                ):
+                    with patch.object(
+                        updater,
+                        "_check_freshclam_running",
+                        return_value=(False, None),
+                    ):
+                        with patch.object(
+                            updater,
+                            "_build_command",
+                            return_value=["freshclam"],
+                        ):
+                            with patch.object(
+                                updater,
+                                "_run_update_process",
+                                return_value=("partial output", "", -1, True),
+                            ):
+                                with patch.object(
+                                    updater,
+                                    "_restore_databases_from_backup",
+                                    return_value=(True, "Restored"),
+                                ) as mock_restore:
+                                    result = updater.update_sync(
+                                        force=True,
+                                        prefer_service=False,
+                                    )
+
+        assert result.status == UpdateStatus.ERROR
+        mock_restore.assert_called_once()
+
+    def test_force_cancel_restores_backup_in_flatpak_mode(self, updater_module):
+        """Force-update cancellation should restore backups in Flatpak mode."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        UpdateStatus = updater_module["UpdateStatus"]
+        mock_log_manager = MagicMock()
+
+        with patch("src.core.updater.is_flatpak", return_value=True):
+            with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+                updater = FreshclamUpdater(log_manager=mock_log_manager)
+
+                def simulate_cancel(*args, **kwargs):
+                    updater._update_cancelled = True
+                    return ("", "", 0, False)
+
+                with patch.object(
+                    updater,
+                    "_backup_local_databases",
+                    return_value=(True, None, []),
+                ):
+                    with patch.object(
+                        updater,
+                        "_delete_local_databases",
+                        return_value=(True, None, 2),
+                    ):
+                        with patch.object(
+                            updater,
+                            "_build_command",
+                            return_value=["freshclam"],
+                        ):
+                            with patch.object(
+                                updater,
+                                "_run_update_process",
+                                side_effect=simulate_cancel,
+                            ):
+                                with patch.object(
+                                    updater,
+                                    "_restore_databases_from_backup",
+                                    return_value=(True, "Restored"),
+                                ) as mock_restore:
+                                    result = updater.update_sync(
+                                        force=True,
+                                        prefer_service=False,
+                                    )
+
+        assert result.status == UpdateStatus.CANCELLED
+        mock_restore.assert_called_once()
+
 
 # =============================================================================
 # FreshclamUpdater.update_async() Tests
