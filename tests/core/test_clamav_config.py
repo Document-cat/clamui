@@ -194,6 +194,104 @@ class TestClamAVConfig:
         values = config.get_values("DatabaseMirror")
         assert len(values) == 2
 
+    def test_remove_key_blanks_raw_lines_and_deletes_values(self):
+        """Test remove_key blanks original lines and removes from values dict."""
+        config = ClamAVConfig(file_path=Path("/test"))
+        config.raw_lines = [
+            "# freshclam config\n",
+            "DatabaseDirectory /var/lib/clamav\n",
+            "DatabaseCustomURL https://urlhaus.abuse.ch/downloads/urlhaus.ndb\n",
+            "DatabaseCustomURL https://example.com/sigs.hdb\n",
+            "Checks 12\n",
+        ]
+        config.values = {
+            "DatabaseDirectory": [ClamAVConfigValue(value="/var/lib/clamav", line_number=2)],
+            "DatabaseCustomURL": [
+                ClamAVConfigValue(
+                    value="https://urlhaus.abuse.ch/downloads/urlhaus.ndb", line_number=3
+                ),
+                ClamAVConfigValue(value="https://example.com/sigs.hdb", line_number=4),
+            ],
+            "Checks": [ClamAVConfigValue(value="12", line_number=5)],
+        }
+
+        config.remove_key("DatabaseCustomURL")
+
+        assert "DatabaseCustomURL" not in config.values
+        # Original lines at index 2 and 3 should be blanked
+        assert config.raw_lines[2] == ""
+        assert config.raw_lines[3] == ""
+        # Other lines untouched
+        assert "DatabaseDirectory" in config.raw_lines[1]
+
+    def test_remove_key_then_add_no_duplicates(self):
+        """Test that remove_key + add_value produces exactly one entry per new URL."""
+        config = ClamAVConfig(file_path=Path("/test"))
+        config.raw_lines = [
+            "DatabaseDirectory /var/lib/clamav\n",
+            "DatabaseCustomURL https://old-url.example.com/sigs.hdb\n",
+            "DatabaseCustomURL https://another-old.example.com/sigs.hdb\n",
+            "Checks 12\n",
+        ]
+        config.values = {
+            "DatabaseDirectory": [ClamAVConfigValue(value="/var/lib/clamav", line_number=1)],
+            "DatabaseCustomURL": [
+                ClamAVConfigValue(
+                    value="https://old-url.example.com/sigs.hdb", line_number=2
+                ),
+                ClamAVConfigValue(
+                    value="https://another-old.example.com/sigs.hdb", line_number=3
+                ),
+            ],
+            "Checks": [ClamAVConfigValue(value="12", line_number=4)],
+        }
+
+        # Simulate what save_page does: remove_key then add new values
+        config.remove_key("DatabaseCustomURL")
+        config.add_value("DatabaseCustomURL", "https://new-url.example.com/sigs.hdb")
+
+        output = config.to_string()
+        assert output.count("DatabaseCustomURL") == 1
+        assert "https://new-url.example.com/sigs.hdb" in output
+        assert "https://old-url.example.com/sigs.hdb" not in output
+        assert "https://another-old.example.com/sigs.hdb" not in output
+
+    def test_remove_key_clears_all_urls(self):
+        """Test that remove_key without add_value removes all entries from output."""
+        config = ClamAVConfig(file_path=Path("/test"))
+        config.raw_lines = [
+            "DatabaseDirectory /var/lib/clamav\n",
+            "DatabaseCustomURL https://urlhaus.abuse.ch/downloads/urlhaus.ndb\n",
+            "Checks 12\n",
+        ]
+        config.values = {
+            "DatabaseDirectory": [ClamAVConfigValue(value="/var/lib/clamav", line_number=1)],
+            "DatabaseCustomURL": [
+                ClamAVConfigValue(
+                    value="https://urlhaus.abuse.ch/downloads/urlhaus.ndb", line_number=2
+                ),
+            ],
+            "Checks": [ClamAVConfigValue(value="12", line_number=3)],
+        }
+
+        config.remove_key("DatabaseCustomURL")
+
+        output = config.to_string()
+        assert "DatabaseCustomURL" not in output
+        assert "DatabaseDirectory /var/lib/clamav" in output
+        assert "Checks 12" in output
+
+    def test_remove_key_nonexistent_is_noop(self):
+        """Test that remove_key on a missing key does nothing."""
+        config = ClamAVConfig(file_path=Path("/test"))
+        config.raw_lines = ["LogVerbose yes\n"]
+        config.values = {"LogVerbose": [ClamAVConfigValue(value="yes", line_number=1)]}
+
+        config.remove_key("NonExistent")  # Should not raise
+
+        assert config.get_value("LogVerbose") == "yes"
+        assert len(config.raw_lines) == 1
+
     def test_has_key_true(self):
         """Test has_key returns True for existing key."""
         config = ClamAVConfig(file_path=Path("/test"))

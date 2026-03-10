@@ -144,6 +144,28 @@ class ClamAVConfig:
             self.values[key] = []
         self.values[key].append(ClamAVConfigValue(value=value, line_number=line_number))
 
+    def remove_key(self, key: str) -> None:
+        """
+        Remove a key and blank its original lines from raw_lines.
+
+        This ensures that when to_string() reconstructs the file, the old
+        lines for this key are replaced with empty strings (which become
+        blank lines) rather than being kept verbatim.  Without this,
+        values.pop() would orphan the raw_lines entries and cause
+        duplicates when new values are later appended with line_number=0.
+
+        Args:
+            key: The configuration option name to remove
+        """
+        if key in self.values:
+            for config_value in self.values[key]:
+                if (
+                    config_value.line_number > 0
+                    and config_value.line_number <= len(self.raw_lines)
+                ):
+                    self.raw_lines[config_value.line_number - 1] = ""
+            del self.values[key]
+
     def has_key(self, key: str) -> bool:
         """
         Check if a configuration key exists.

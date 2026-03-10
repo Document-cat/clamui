@@ -840,9 +840,10 @@ class DatabasePage(PreferencesPageMixin):
             updates["HTTPProxyPassword"] = proxy_pass
 
         # Collect DatabaseCustomURL list (multi-value option)
+        # Always include the key, even when empty, so remove_key() can
+        # blank the old lines in freshclam.conf when all URLs are cleared.
         custom_urls = [url for _, url in widgets_dict.get("_custom_url_rows", [])]
-        if custom_urls:
-            updates["DatabaseCustomURL"] = custom_urls  # List for multi-value
+        updates["DatabaseCustomURL"] = custom_urls
 
         return updates
 

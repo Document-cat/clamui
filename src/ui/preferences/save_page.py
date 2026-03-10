@@ -373,8 +373,8 @@ class SavePage(PreferencesPageMixin):
                 # Apply updates to config using set_value (or add_value for lists)
                 for key, value in freshclam_updates.items():
                     if isinstance(value, list):
-                        # Multi-value option: clear existing and add each value
-                        self._window._freshclam_config.values.pop(key, None)
+                        # Multi-value option: blank old lines, then add each value
+                        self._window._freshclam_config.remove_key(key)
                         for v in value:
                             self._window._freshclam_config.add_value(key, v)
                     else:
@@ -386,8 +386,8 @@ class SavePage(PreferencesPageMixin):
                 # Apply scanner updates to config using set_value (or add_value for lists)
                 for key, value in clamd_updates.items():
                     if isinstance(value, list):
-                        # Multi-value option: clear existing and add each value
-                        self._window._clamd_config.values.pop(key, None)
+                        # Multi-value option: blank old lines, then add each value
+                        self._window._clamd_config.remove_key(key)
                         for v in value:
                             self._window._clamd_config.add_value(key, v)
                     else:
@@ -395,8 +395,8 @@ class SavePage(PreferencesPageMixin):
                 # Apply On-Access updates to config using set_value (or add_value for lists)
                 for key, value in onaccess_updates.items():
                     if isinstance(value, list):
-                        # Multi-value option: clear existing and add each value
-                        self._window._clamd_config.values.pop(key, None)
+                        # Multi-value option: blank old lines, then add each value
+                        self._window._clamd_config.remove_key(key)
                         for v in value:
                             self._window._clamd_config.add_value(key, v)
                     else:
