@@ -134,14 +134,12 @@ def parse_arguments(argv: list[str]) -> tuple[list[str], bool, list[str]]:
     file_paths = [uri_to_path(f) for f in args.files] if args.files else []
 
     if file_paths:
-        # Log received file paths for debugging context menu integration
+        # Keep startup diagnostics privacy-safe: report counts only.
         mode = "VirusTotal" if args.virustotal else "ClamAV"
         print(
-            f"ClamUI: Received {len(file_paths)} path(s) for {mode} scanning:",
+            f"ClamUI: Received {len(file_paths)} path(s) for {mode} scanning.",
             file=sys.stderr,
         )
-        for path in file_paths:
-            print(f"  - {path}", file=sys.stderr)
 
     return file_paths, args.virustotal, unknown_args
 

@@ -22,7 +22,6 @@ from gi.repository import Adw, Gdk, GLib, Gtk
 from ...core.flatpak import is_flatpak
 from ...core.i18n import N_, _, ngettext
 from ...core.logging_config import get_logging_config
-from ...core.sanitize import sanitize_path_for_logging
 from ..compat import create_toolbar_view, save_path_dialog
 from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin, styled_prefix_icon
@@ -139,11 +138,10 @@ class DebugPage(PreferencesPageMixin):
         # Log file location row
         logging_config = get_logging_config()
         log_dir = logging_config.get_log_dir()
-        log_path_display = sanitize_path_for_logging(str(log_dir))
 
         location_row = Adw.ActionRow()
         location_row.set_title(_("Log File Location"))
-        location_row.set_subtitle(log_path_display)
+        location_row.set_subtitle(str(log_dir))
 
         # Add folder icon as prefix
         location_row.add_prefix(styled_prefix_icon("folder-open-symbolic"))

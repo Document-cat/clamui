@@ -151,7 +151,7 @@ from pathlib import Path
 
 from gi.repository import GLib
 
-from .sanitize import sanitize_log_line, sanitize_log_text
+from .sanitize import redact_sensitive_log_data, sanitize_log_line, sanitize_log_text
 from .utils import is_flatpak, which_host_command, wrap_host_command
 
 logger = logging.getLogger(__name__)
@@ -170,6 +170,206 @@ _INDEX_FIELD_PATTERN = re.compile(r'"(id|timestamp|type)"\s*:\s*"([^"\\]*(?:\\.[
 # Total ~122 bytes minimum. Using 512 bytes provides safety margin for
 # whitespace variations and ensures we capture all three fields.
 _INDEX_EXTRACT_MAX_BYTES = 512
+
+
+def _sanitize_private_line(text: str | None) -> str:
+    """Sanitize log-injection vectors and redact sensitive identifiers."""
+    return redact_sensitive_log_data(sanitize_log_line(text))
+
+
+def _sanitize_private_text(text: str | None) -> str:
+    """Sanitize multi-line log text and redact sensitive identifiers."""
+    return redact_sensitive_log_data(sanitize_log_text(text))
+
+
+def _extract_first_int(pattern: str, text: str) -> int | None:
+    """Extract the first integer captured by pattern from text."""
+    match = re.search(pattern, text)
+    if not match:
+        return None
+
+    try:
+        return int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_detection_counts(text: str) -> tuple[int | None, int | None]:
+    """Extract VirusTotal detection counts from existing summary/detail text."""
+    match = re.search(r"Detections:\s*(\d+)\s*/\s*(\d+)", text)
+    if match:
+        try:
+            return (int(match.group(1)), int(match.group(2)))
+        except (TypeError, ValueError):
+            return (None, None)
+
+    match = re.search(r"(\d+)\s*/\s*(\d+)\s+engines", text)
+    if match:
+        try:
+            return (int(match.group(1)), int(match.group(2)))
+        except (TypeError, ValueError):
+            return (None, None)
+
+    return (None, None)
+
+
+def _build_scan_summary(scan_status: str, infected_count: int = 0, suffix: str = "") -> str:
+    """Build a privacy-safe summary for scan log entries."""
+    suffix_text = f" {suffix}" if suffix else ""
+
+    if scan_status == "clean":
+        return f"Clean scan{suffix_text}"
+    if scan_status == "infected":
+        if infected_count > 0:
+            return f"Found {infected_count} threat(s){suffix_text}"
+        return f"Threats detected{suffix_text}"
+    if scan_status == "cancelled":
+        return f"Scan cancelled{suffix_text}"
+    return f"Scan error{suffix_text}"
+
+
+def _build_scan_details(
+    scanned_files: int = 0,
+    scanned_dirs: int = 0,
+    infected_count: int = 0,
+    threat_names: list[str] | None = None,
+    error_message: str | None = None,
+) -> str:
+    """Build privacy-safe details for a scan log entry."""
+    details_parts = []
+    if scanned_files > 0 or scanned_dirs > 0:
+        details_parts.append(f"Scanned: {scanned_files} files, {scanned_dirs} directories")
+    if infected_count > 0:
+        details_parts.append(f"Threats found: {infected_count}")
+        for threat_name in threat_names or []:
+            if threat_name:
+                details_parts.append(f"  - {threat_name}")
+    if error_message:
+        details_parts.append(f"Error: {error_message}")
+    return "\n".join(details_parts)
+
+
+def _build_virustotal_summary(
+    vt_status: str,
+    detections: int = 0,
+    total_engines: int = 0,
+) -> str:
+    """Build a privacy-safe summary for VirusTotal log entries."""
+    if vt_status == "clean":
+        return "VirusTotal: Clean scan"
+    if vt_status == "detected":
+        if detections > 0 and total_engines > 0:
+            return f"VirusTotal: {detections}/{total_engines} engines detected threats"
+        return "VirusTotal: Threats detected"
+    if vt_status == "rate_limited":
+        return "VirusTotal: Rate limit exceeded"
+    if vt_status == "pending":
+        return "VirusTotal: Analysis pending"
+    if vt_status == "not_found":
+        return "VirusTotal: File not previously analyzed"
+    if vt_status == "file_too_large":
+        return "VirusTotal: File too large for upload"
+    return "VirusTotal: Scan error"
+
+
+def _build_virustotal_details(
+    detections: int = 0,
+    total_engines: int = 0,
+    detection_lines: list[str] | None = None,
+    error_message: str | None = None,
+) -> str:
+    """Build privacy-safe details for a VirusTotal log entry."""
+    details_parts = []
+
+    if total_engines > 0:
+        details_parts.append(f"Scanned by: {total_engines} engines")
+
+    if detections > 0 or total_engines > 0:
+        details_parts.append(f"Detections: {detections}/{total_engines}")
+        for detection_line in detection_lines or []:
+            if detection_line:
+                details_parts.append(f"  - {detection_line}")
+
+    if error_message:
+        details_parts.append(f"Error: {error_message}")
+
+    return "\n".join(details_parts)
+
+
+def _sanitize_existing_scan_details(details: str) -> str:
+    """Retain only privacy-safe scan detail lines from existing persisted logs."""
+    preserved_lines: list[str] = []
+
+    for line in _sanitize_private_text(details).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if stripped.startswith("Scanned:"):
+            preserved_lines.append(stripped)
+            continue
+
+        if stripped.startswith("Threats found:"):
+            preserved_lines.append(stripped)
+            continue
+
+        if stripped.startswith("Error:"):
+            error_text = stripped.split("Error:", 1)[1].strip()
+            preserved_lines.append(f"Error: {_sanitize_private_line(error_text)}")
+            continue
+
+        if line.startswith("  - "):
+            threat_text = line[4:].strip()
+            if ": " in threat_text:
+                threat_text = threat_text.rsplit(": ", 1)[-1]
+            threat_text = _sanitize_private_line(threat_text)
+            if threat_text:
+                preserved_lines.append(f"  - {threat_text}")
+
+    return "\n".join(preserved_lines)
+
+
+def _sanitize_existing_virustotal_details(details: str) -> str:
+    """Retain only privacy-safe VirusTotal detail lines from existing persisted logs."""
+    preserved_lines: list[str] = []
+
+    for line in _sanitize_private_text(details).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if stripped.startswith(("Scanned by:", "Detections:")):
+            preserved_lines.append(stripped)
+            continue
+
+        if stripped.startswith("Error:"):
+            error_text = stripped.split("Error:", 1)[1].strip()
+            preserved_lines.append(f"Error: {_sanitize_private_line(error_text)}")
+            continue
+
+        if line.startswith("  - "):
+            detection_line = _sanitize_private_line(line[4:].strip())
+            if detection_line:
+                preserved_lines.append(f"  - {detection_line}")
+
+    return "\n".join(preserved_lines)
+
+
+def _sanitize_persisted_log_data(data: dict) -> dict:
+    """Redact stored log JSON data in-place-safe form for migration."""
+    sanitized = dict(data)
+    log_type = _sanitize_private_line(data.get("type", "unknown"))
+    status = _sanitize_private_line(data.get("status", "unknown"))
+    raw_summary = data.get("summary", "")
+    raw_details = data.get("details", "")
+
+    sanitized["type"] = log_type
+    sanitized["status"] = status
+    sanitized["path"] = None
+
+    sanitized["summary"] = _sanitize_private_line(raw_summary)
+    sanitized["details"] = _sanitize_private_text(raw_details)
+    return sanitized
 
 
 def _extract_index_fields(file_path: Path) -> dict[str, str] | None:
@@ -271,14 +471,19 @@ class LogEntry:
         Returns:
             New LogEntry instance
         """
+        if path:
+            # Paths are intentionally discarded from persisted logs, but we still
+            # sanitize the input to keep the privacy boundary explicit.
+            _sanitize_private_line(path)
+
         return cls(
             id=str(uuid.uuid4()),
             timestamp=datetime.now().isoformat(),
             type=log_type,
             status=status,
-            summary=sanitize_log_line(summary),
-            details=sanitize_log_text(details),
-            path=sanitize_log_line(path) if path else None,
+            summary=_sanitize_private_line(summary),
+            details=_sanitize_private_text(details),
+            path=None,
             duration=duration,
             scheduled=scheduled,
         )
@@ -307,11 +512,11 @@ class LogEntry:
         return cls(
             id=data.get("id", str(uuid.uuid4())),
             timestamp=data.get("timestamp", datetime.now().isoformat()),
-            type=sanitize_log_line(raw_type),
-            status=sanitize_log_line(raw_status),
-            summary=sanitize_log_line(raw_summary),
-            details=sanitize_log_text(raw_details),
-            path=sanitize_log_line(raw_path) if raw_path else None,
+            type=_sanitize_private_line(raw_type),
+            status=_sanitize_private_line(raw_status),
+            summary=_sanitize_private_line(raw_summary),
+            details=_sanitize_private_text(raw_details),
+            path=None if raw_path else None,
             duration=data.get("duration", 0.0),
             scheduled=data.get("scheduled", False),
         )
@@ -354,51 +559,46 @@ class LogEntry:
             New LogEntry instance
         """
         threat_details = threat_details or []
+        if path:
+            _sanitize_private_line(path)
+        if stdout:
+            _sanitize_private_text(stdout)
 
-        # Sanitize input fields before building summary and details
-        sanitized_path = sanitize_log_line(path)
-        sanitized_suffix = sanitize_log_line(suffix)
-        sanitized_error_message = sanitize_log_line(error_message) if error_message else None
-        sanitized_stdout = sanitize_log_text(stdout)
+        sanitized_suffix = _sanitize_private_line(suffix) if suffix else ""
+        sanitized_error_message = _sanitize_private_line(error_message) if error_message else None
 
-        # Build summary based on status
-        suffix_str = f" {sanitized_suffix}" if sanitized_suffix else ""
         if scan_status == "clean":
-            summary = f"Clean scan of {sanitized_path}{suffix_str}"
             status = "clean"
         elif scan_status == "infected":
-            summary = f"Found {infected_count} threat(s) in {sanitized_path}{suffix_str}"
             status = "infected"
         elif scan_status == "cancelled":
-            summary = f"Scan cancelled: {sanitized_path}"
             status = "cancelled"
         else:
-            summary = f"Scan error: {sanitized_path}"
             status = "error"
 
-        # Build details string
-        details_parts = []
-        if scanned_files > 0:
-            details_parts.append(f"Scanned: {scanned_files} files, {scanned_dirs} directories")
-        if infected_count > 0:
-            details_parts.append(f"Threats found: {infected_count}")
-            for threat in threat_details:
-                # Sanitize threat details before adding to log
-                raw_file_path = threat.get("file_path", threat.get("path", "unknown"))
-                raw_threat_name = threat.get("threat_name", threat.get("name", "unknown"))
-                sanitized_file_path = sanitize_log_line(raw_file_path)
-                sanitized_threat_name = sanitize_log_line(raw_threat_name)
-                details_parts.append(f"  - {sanitized_file_path}: {sanitized_threat_name}")
-        if sanitized_error_message:
-            details_parts.append(f"Error: {sanitized_error_message}")
-        details = "\n".join(details_parts) if details_parts else sanitized_stdout or ""
+        summary = _build_scan_summary(
+            status,
+            infected_count=infected_count,
+            suffix=sanitized_suffix,
+        )
+        threat_names = [
+            _sanitize_private_line(threat.get("threat_name", threat.get("name", "unknown")))
+            for threat in threat_details
+        ]
+        details = _build_scan_details(
+            scanned_files=scanned_files,
+            scanned_dirs=scanned_dirs,
+            infected_count=infected_count,
+            threat_names=threat_names,
+            error_message=sanitized_error_message,
+        )
 
         return cls.create(
             log_type="scan",
             status=status,
             summary=summary,
             details=details,
-            path=sanitized_path,
+            path=None,
             duration=duration,
             scheduled=scheduled,
         )
@@ -438,64 +638,55 @@ class LogEntry:
             New LogEntry instance
         """
         detection_details = detection_details or []
+        if file_path:
+            _sanitize_private_line(file_path)
+        if sha256:
+            _sanitize_private_line(sha256)
+        if permalink:
+            _sanitize_private_line(permalink)
 
-        # Sanitize input fields before building summary and details
-        sanitized_path = sanitize_log_line(file_path)
-        sanitized_sha256 = sanitize_log_line(sha256)
-        sanitized_error_message = sanitize_log_line(error_message) if error_message else None
+        sanitized_error_message = _sanitize_private_line(error_message) if error_message else None
 
-        # Build summary based on status
         if vt_status == "clean":
-            summary = f"VirusTotal: Clean scan of {sanitized_path}"
             status = "clean"
         elif vt_status == "detected":
-            summary = f"VirusTotal: {detections}/{total_engines} engines detected threats in {sanitized_path}"
             status = "infected"
         elif vt_status == "rate_limited":
-            summary = f"VirusTotal: Rate limit exceeded for {sanitized_path}"
             status = "error"
         elif vt_status == "pending":
-            summary = f"VirusTotal: Analysis pending for {sanitized_path}"
             status = "pending"
         elif vt_status == "not_found":
-            summary = f"VirusTotal: File not previously analyzed - {sanitized_path}"
             status = "unknown"
         elif vt_status == "file_too_large":
-            summary = f"VirusTotal: File too large for upload - {sanitized_path}"
             status = "error"
         else:
-            summary = f"VirusTotal: Scan error for {sanitized_path}"
             status = "error"
 
-        # Build details string
-        details_parts = [f"SHA256: {sanitized_sha256}"]
+        summary = _build_virustotal_summary(
+            vt_status,
+            detections=detections,
+            total_engines=total_engines,
+        )
+        detection_lines = []
+        for detection in detection_details:
+            engine = _sanitize_private_line(detection.get("engine_name", "unknown"))
+            result = _sanitize_private_line(detection.get("result", "unknown"))
+            category = _sanitize_private_line(detection.get("category", "unknown"))
+            detection_lines.append(f"{engine} ({category}): {result}")
 
-        if total_engines > 0:
-            details_parts.append(f"Scanned by: {total_engines} engines")
-
-        if detections > 0:
-            details_parts.append(f"Detections: {detections}/{total_engines}")
-            for detection in detection_details:
-                engine = sanitize_log_line(detection.get("engine_name", "unknown"))
-                result = sanitize_log_line(detection.get("result", "unknown"))
-                category = detection.get("category", "unknown")
-                details_parts.append(f"  - {engine} ({category}): {result}")
-
-        if permalink:
-            sanitized_permalink = sanitize_log_line(permalink)
-            details_parts.append(f"Report: {sanitized_permalink}")
-
-        if sanitized_error_message:
-            details_parts.append(f"Error: {sanitized_error_message}")
-
-        details = "\n".join(details_parts)
+        details = _build_virustotal_details(
+            detections=detections,
+            total_engines=total_engines,
+            detection_lines=detection_lines,
+            error_message=sanitized_error_message,
+        )
 
         return cls.create(
             log_type="virustotal",
             status=status,
             summary=summary,
             details=details,
-            path=sanitized_path,
+            path=None,
             duration=duration,
             scheduled=False,
         )
@@ -547,6 +738,7 @@ class LogManager:
 
         # Flag to track if migration check has been performed
         self._migration_checked = False
+        self._privacy_migration_checked = False
 
         # Ensure log directory exists
         self._ensure_log_dir()
@@ -768,6 +960,53 @@ class LogManager:
                 logger.warning("Failed to rebuild log index: %s", e)
                 return False
 
+    def _write_log_file_unlocked(self, log_file: Path, data: dict) -> None:
+        """Atomically write a JSON log file without acquiring the manager lock."""
+        fd, temp_path = tempfile.mkstemp(
+            suffix=".json",
+            prefix="log_entry_",
+            dir=self._log_dir,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+
+            Path(temp_path).replace(log_file)
+            log_file.chmod(0o600)
+        except Exception:
+            with contextlib.suppress(OSError):
+                Path(temp_path).unlink(missing_ok=True)
+            raise
+
+    def _check_and_run_privacy_migration_unlocked(self) -> None:
+        """Redact sensitive data from existing persisted scan logs once per instance."""
+        if self._privacy_migration_checked:
+            return
+
+        self._privacy_migration_checked = True
+
+        if not self._log_dir.exists():
+            return
+
+        for log_file in self._log_dir.glob("*.json"):
+            if log_file.name == INDEX_FILENAME:
+                continue
+
+            try:
+                with open(log_file, encoding="utf-8") as f:
+                    data = json.load(f)
+
+                required_fields = ("id", "timestamp", "type")
+                if any(not data.get(field) for field in required_fields):
+                    continue
+
+                sanitized = _sanitize_persisted_log_data(data)
+                if sanitized != data:
+                    self._write_log_file_unlocked(log_file, sanitized)
+            except (OSError, json.JSONDecodeError) as e:
+                logger.debug("Privacy migration skipped for %s: %s", log_file.name, e)
+                continue
+
     def save_log(self, entry: LogEntry) -> bool:
         """
         Save a log entry to storage and update the index.
@@ -781,13 +1020,9 @@ class LogManager:
         with self._lock:
             try:
                 self._ensure_log_dir()
+                self._check_and_run_privacy_migration_unlocked()
                 log_file = self._log_dir / f"{entry.id}.json"
-                with open(log_file, "w", encoding="utf-8") as f:
-                    json.dump(entry.to_dict(), f, indent=2)
-
-                # Harden file permissions (owner read/write only)
-                # Log files may contain sensitive scan paths
-                log_file.chmod(0o600)
+                self._write_log_file_unlocked(log_file, entry.to_dict())
 
                 # Update index with new entry metadata (best-effort)
                 try:
@@ -1015,6 +1250,7 @@ class LogManager:
             List of LogEntry objects
         """
         with self._lock:
+            self._check_and_run_privacy_migration_unlocked()
             # Perform auto-migration check on first access
             self._check_and_run_migration_unlocked()
 
@@ -1074,6 +1310,7 @@ class LogManager:
         """
         with self._lock:
             try:
+                self._check_and_run_privacy_migration_unlocked()
                 log_file = self._log_dir / f"{log_id}.json"
                 if log_file.exists():
                     with open(log_file, encoding="utf-8") as f:
@@ -1158,6 +1395,7 @@ class LogManager:
         """
         with self._lock:
             try:
+                self._check_and_run_privacy_migration_unlocked()
                 if not self._log_dir.exists():
                     return 0
 
@@ -1509,7 +1747,7 @@ class LogManager:
                     content = result.stdout
                     if not content.strip():
                         return (True, "(Log file is empty)")
-                    return (True, content)
+                    return (True, _sanitize_private_text(content))
                 # If tail failed (permission denied), fall through to journalctl
 
             except subprocess.TimeoutExpired:
@@ -1528,13 +1766,15 @@ class LogManager:
         if log_path is not None:
             return (
                 False,
-                f"Permission denied reading {log_path}\n\n"
-                "The daemon log file requires elevated permissions.\n"
-                "Options:\n"
-                "  • Add your user to the 'adm' or 'clamav' group:\n"
-                "    sudo usermod -aG adm $USER\n"
-                "  • Or check if clamd logs to systemd journal:\n"
-                "    journalctl -u clamav-daemon",
+                _sanitize_private_text(
+                    f"Permission denied reading {log_path}\n\n"
+                    "The daemon log file requires elevated permissions.\n"
+                    "Options:\n"
+                    "  • Add your user to the 'adm' or 'clamav' group:\n"
+                    "    sudo usermod -aG adm $USER\n"
+                    "  • Or check if clamd logs to systemd journal:\n"
+                    "    journalctl -u clamav-daemon"
+                ),
             )
 
         return (
@@ -1582,7 +1822,7 @@ class LogManager:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
                 if result.returncode == 0 and result.stdout.strip():
-                    return (True, result.stdout)
+                    return (True, _sanitize_private_text(result.stdout))
 
             except (subprocess.SubprocessError, FileNotFoundError, OSError):
                 continue
@@ -1608,8 +1848,8 @@ class LogManager:
                 content = "".join(tail_lines)
                 if not content.strip():
                     return (True, "(Log file is empty)")
-                return (True, content)
+                return (True, _sanitize_private_text(content))
         except PermissionError:
             return (False, "Permission denied reading log file")
         except OSError as e:
-            return (False, f"Error reading log file: {e}")
+            return (False, _sanitize_private_text(f"Error reading log file: {e}"))

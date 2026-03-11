@@ -175,6 +175,38 @@ class TestDebugPageLoadLogLevel:
         _clear_src_modules()
 
 
+class TestDebugPageLogLocation:
+    """Test log file location display."""
+
+    def test_logging_settings_group_shows_actual_log_dir(self, mock_gi_modules):
+        """Test the UI shows the real log directory path, not a redacted placeholder."""
+        adw = mock_gi_modules["adw"]
+        created_rows = []
+
+        def action_row_factory(*args, **kwargs):
+            row = MagicMock()
+            created_rows.append(row)
+            return row
+
+        adw.ActionRow.side_effect = action_row_factory
+
+        from src.ui.preferences.debug_page import DebugPage
+
+        page = DebugPage()
+
+        with patch("src.ui.preferences.debug_page.get_logging_config") as mock_config:
+            mock_logging_config = MagicMock()
+            mock_logging_config.get_log_dir.return_value = "/home/user/.local/share/clamui/debug"
+            mock_config.return_value = mock_logging_config
+
+            page._create_logging_settings_group()
+
+        assert len(created_rows) == 1
+        action_row = created_rows[0]
+        action_row.set_subtitle.assert_called_with("/home/user/.local/share/clamui/debug")
+        _clear_src_modules()
+
+
 class TestDebugPageOnLogLevelChanged:
     """Test log level change handling."""
 

@@ -12,8 +12,10 @@ Logging should be configured early in application startup, before
 other modules that use logging are imported.
 """
 
+import contextlib
 import logging
 import os
+import tempfile
 import threading
 import zipfile
 from datetime import datetime
@@ -35,14 +37,16 @@ DEFAULT_BACKUP_COUNT = 3  # 3 backup files = 20 MB max total
 # Log format with timestamp, level, module, and message
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+DEBUG_LOG_PRIVACY_VERSION = 1
+PRIVACY_STATE_FILENAME = ".debug-log-privacy-version"
 
 
 class PrivacyFormatter(logging.Formatter):
     """
-    Custom log formatter that sanitizes paths for privacy.
+    Custom log formatter that redacts file-identifying values for privacy.
 
-    Replaces home directory paths with ~ in log messages to prevent
-    accidental exposure of usernames when logs are shared or exported.
+    Runtime debug logs must never persist scan targets, file paths, hashes,
+    or report URLs. This formatter rewrites those values before they reach disk.
     """
 
     def format(self, record: logging.LogRecord) -> str:
@@ -58,7 +62,7 @@ class PrivacyFormatter(logging.Formatter):
         # Format the message first
         formatted = super().format(record)
 
-        # Sanitize paths in the formatted message
+        # Redact sensitive values in the formatted message
         return sanitize_path_for_logging(formatted)
 
 
@@ -90,6 +94,7 @@ class LoggingConfig:
         self._file_handler: RotatingFileHandler | None = None
         self._log_dir: Path = DEFAULT_LOG_DIR
         self._log_file: Path | None = None
+        self._sanitization_thread: threading.Thread | None = None
         self._config_lock = threading.Lock()
         self._initialized = True
 
@@ -117,6 +122,14 @@ class LoggingConfig:
         """
         with self._config_lock:
             try:
+                root_logger = logging.getLogger("src")
+
+                # Remove existing handler before rewriting log files.
+                if self._file_handler is not None:
+                    root_logger.removeHandler(self._file_handler)
+                    self._file_handler.close()
+                    self._file_handler = None
+
                 # Set up log directory
                 if log_dir is not None:
                     self._log_dir = Path(log_dir)
@@ -131,11 +144,11 @@ class LoggingConfig:
                 # Set up log file path
                 self._log_file = self._log_dir / "clamui.log"
 
-                # Remove existing handler if reconfiguring
-                root_logger = logging.getLogger("src")
-                if self._file_handler is not None:
-                    root_logger.removeHandler(self._file_handler)
-                    self._file_handler.close()
+                # Only perform a full startup migration once. After legacy logs
+                # have been scrubbed, future sessions append to the sanitized
+                # active log directly and skip any background work.
+                if not self._has_completed_privacy_migration_unlocked():
+                    self._relocate_active_log_for_background_sanitization_locked()
 
                 # Create rotating file handler
                 self._file_handler = RotatingFileHandler(
@@ -169,6 +182,9 @@ class LoggingConfig:
                     backup_count,
                 )
 
+                # Redact historical debug logs off the startup critical path.
+                self._schedule_existing_log_sanitization_locked()
+
                 return True
 
             except (OSError, PermissionError) as e:
@@ -177,6 +193,142 @@ class LoggingConfig:
 
                 print(f"Failed to configure logging: {e}", file=sys.stderr)
                 return False
+
+    def _relocate_active_log_for_background_sanitization_locked(self) -> None:
+        """Rename the previous active log so a new session can start immediately."""
+        if self._log_file is None or not self._log_file.exists():
+            return
+
+        try:
+            if self._log_file.stat().st_size == 0:
+                return
+        except OSError:
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        archived_log = self._log_dir / f"clamui.log.pending-redaction-{timestamp}"
+        try:
+            self._log_file.replace(archived_log)
+            archived_log.chmod(0o600)
+        except OSError:
+            # If the rename fails, leave the file in place and let later cleanup
+            # sanitize it when possible.
+            return
+
+    def _get_privacy_state_file_unlocked(self) -> Path:
+        """Return the marker file that tracks debug-log privacy migration state."""
+        return self._log_dir / PRIVACY_STATE_FILENAME
+
+    def _read_privacy_state_version_unlocked(self) -> int:
+        """Read the stored privacy migration version from disk."""
+        state_file = self._get_privacy_state_file_unlocked()
+        try:
+            return int(state_file.read_text(encoding="utf-8").strip() or "0")
+        except (OSError, ValueError):
+            return 0
+
+    def _has_completed_privacy_migration_unlocked(self) -> bool:
+        """Return True when legacy debug logs were already scrubbed."""
+        return self._read_privacy_state_version_unlocked() >= DEBUG_LOG_PRIVACY_VERSION
+
+    def _mark_privacy_migration_complete_unlocked(self) -> None:
+        """Persist the current debug-log privacy migration version."""
+        fd, temp_path = tempfile.mkstemp(
+            prefix="debug_privacy_",
+            dir=self._log_dir,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(str(DEBUG_LOG_PRIVACY_VERSION))
+
+            state_file = self._get_privacy_state_file_unlocked()
+            Path(temp_path).replace(state_file)
+            state_file.chmod(0o600)
+        except OSError:
+            with contextlib.suppress(OSError):
+                Path(temp_path).unlink(missing_ok=True)
+
+    def _clear_privacy_migration_state_unlocked(self) -> None:
+        """Delete the debug-log privacy migration marker."""
+        with contextlib.suppress(OSError):
+            self._get_privacy_state_file_unlocked().unlink()
+
+    @staticmethod
+    def _is_pending_redaction_file(log_file: Path) -> bool:
+        """Return True when a log file still needs pending-redaction finalization."""
+        return ".pending-redaction-" in log_file.name
+
+    def _collect_sanitization_targets_unlocked(self, *, force_full: bool = False) -> list[Path]:
+        """Collect log files that still require privacy sanitization."""
+        log_files = self._get_log_files_unlocked()
+
+        if force_full or not self._has_completed_privacy_migration_unlocked():
+            return [
+                log_file
+                for log_file in log_files
+                if self._log_file is None or log_file != self._log_file
+            ]
+
+        return [log_file for log_file in log_files if self._is_pending_redaction_file(log_file)]
+
+    def _finalize_sanitized_log_file_unlocked(self, log_file: Path) -> None:
+        """Rename pending-redaction files once they have been processed."""
+        if not self._is_pending_redaction_file(log_file):
+            return
+
+        finalized_name = log_file.name.replace("pending-redaction", "archived", 1)
+        finalized_path = log_file.with_name(finalized_name)
+        if finalized_path.exists():
+            return
+
+        with contextlib.suppress(OSError):
+            log_file.replace(finalized_path)
+            finalized_path.chmod(0o600)
+
+    def _schedule_existing_log_sanitization_locked(self) -> None:
+        """Start background sanitization for older debug log files if needed."""
+        if not self._collect_sanitization_targets_unlocked():
+            if not self._has_completed_privacy_migration_unlocked():
+                self._mark_privacy_migration_complete_unlocked()
+            return
+
+        if self._sanitization_thread is not None and self._sanitization_thread.is_alive():
+            return
+
+        thread = threading.Thread(
+            target=self._sanitize_existing_log_files_background,
+            name="clamui-log-sanitizer",
+            daemon=True,
+        )
+        self._sanitization_thread = thread
+        thread.start()
+
+    def _sanitize_existing_log_files_background(self) -> None:
+        """Run debug log sanitization outside the startup critical path."""
+        with self._config_lock:
+            self._sanitize_existing_log_files_locked()
+
+    def _sanitize_existing_log_files_locked(self, *, force_full: bool = False) -> None:
+        """Rewrite older debug log files with privacy redaction applied."""
+        targets = self._collect_sanitization_targets_unlocked(force_full=force_full)
+        if not targets:
+            if force_full or not self._has_completed_privacy_migration_unlocked():
+                self._mark_privacy_migration_complete_unlocked()
+            return
+
+        for log_file in targets:
+            try:
+                content = log_file.read_text(encoding="utf-8")
+                sanitized = sanitize_path_for_logging(content)
+                if sanitized != content:
+                    log_file.write_text(sanitized, encoding="utf-8")
+                    log_file.chmod(0o600)
+                self._finalize_sanitized_log_file_unlocked(log_file)
+            except OSError:
+                continue
+
+        if force_full or not self._has_completed_privacy_migration_unlocked():
+            self._mark_privacy_migration_complete_unlocked()
 
     def set_log_level(self, level: str) -> bool:
         """
@@ -294,6 +446,8 @@ class LoggingConfig:
                     except (OSError, PermissionError):
                         success = False
 
+                self._clear_privacy_migration_state_unlocked()
+
                 # Reconfigure logging with a fresh handler
                 # (This will create a new empty log file)
                 if self._log_file is not None:
@@ -330,6 +484,7 @@ class LoggingConfig:
         """
         with self._config_lock:
             try:
+                self._sanitize_existing_log_files_locked(force_full=True)
                 output_path = Path(output_path)
                 log_files = self._get_log_files_unlocked()
 

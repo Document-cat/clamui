@@ -11,18 +11,20 @@ from src.core.logging_config import (
     DEFAULT_LOG_LEVEL,
     DEFAULT_MAX_BYTES,
     LOG_FORMAT,
+    PRIVACY_STATE_FILENAME,
     LoggingConfig,
     PrivacyFormatter,
     configure_logging,
     get_logging_config,
 )
+from src.core.sanitize import REDACTED_PATH
 
 
 class TestPrivacyFormatter:
     """Tests for the PrivacyFormatter class."""
 
     def test_format_replaces_home_directory(self):
-        """Test that home directory paths are replaced with ~."""
+        """Test that home directory paths are fully redacted."""
         formatter = PrivacyFormatter(LOG_FORMAT)
         record = logging.LogRecord(
             name="test",
@@ -34,11 +36,11 @@ class TestPrivacyFormatter:
             exc_info=None,
         )
         formatted = formatter.format(record)
-        assert "~/Documents/test.txt" in formatted
+        assert REDACTED_PATH in formatted
         assert os.path.expanduser("~") not in formatted
 
     def test_format_preserves_non_home_paths(self):
-        """Test that non-home directory paths are preserved."""
+        """Test that non-home filesystem paths are also redacted."""
         formatter = PrivacyFormatter(LOG_FORMAT)
         record = logging.LogRecord(
             name="test",
@@ -50,7 +52,7 @@ class TestPrivacyFormatter:
             exc_info=None,
         )
         formatted = formatter.format(record)
-        assert "/etc/clamav/clamd.conf" in formatted
+        assert REDACTED_PATH in formatted
 
     def test_format_handles_message_without_path(self):
         """Test that messages without paths are formatted normally."""
@@ -385,24 +387,24 @@ class TestSanitizePathForLogging:
     """Tests for the sanitize_path_for_logging function imported by logging_config."""
 
     def test_sanitize_path_replaces_home(self):
-        """Test that home directory is replaced with ~."""
+        """Test that home directory paths are redacted."""
         from src.core.sanitize import sanitize_path_for_logging
 
         home = os.path.expanduser("~")
         path = f"{home}/Documents/file.txt"
         result = sanitize_path_for_logging(path)
 
-        assert result == "~/Documents/file.txt"
+        assert result == REDACTED_PATH
         assert home not in result
 
     def test_sanitize_path_preserves_non_home_paths(self):
-        """Test that non-home paths are preserved."""
+        """Test that non-home paths are also redacted."""
         from src.core.sanitize import sanitize_path_for_logging
 
         path = "/etc/clamav/clamd.conf"
         result = sanitize_path_for_logging(path)
 
-        assert result == path
+        assert result == REDACTED_PATH
 
     def test_sanitize_path_handles_none(self):
         """Test that None input returns empty string."""
@@ -477,6 +479,96 @@ class TestLoggingIntegration:
         log_file = log_dir / "clamui.log"
         content = log_file.read_text()
 
-        # Home directory should be replaced
-        assert "~/Documents/secret.txt" in content
+        # File paths should be fully redacted
+        assert REDACTED_PATH in content
         assert home not in content
+
+    def test_configure_redacts_existing_debug_logs(self, tmp_path):
+        """Test that configuring logging redacts existing debug logs in the background."""
+        log_dir = tmp_path / "debug"
+        log_dir.mkdir(parents=True)
+        log_file = log_dir / "clamui.log"
+        original_path = "/home/user/Documents/private/file.txt"
+        log_file.write_text(f"Existing debug entry for {original_path}\n", encoding="utf-8")
+
+        configure_logging(log_level="DEBUG", log_dir=log_dir)
+        config = get_logging_config()
+        if config._sanitization_thread is not None:
+            config._sanitization_thread.join(timeout=2)
+
+        contents = [
+            path.read_text(encoding="utf-8")
+            for path in sorted(log_dir.glob("clamui.log*"))
+            if path.is_file()
+        ]
+        assert any(REDACTED_PATH in content for content in contents)
+        assert all(original_path not in content for content in contents)
+
+    def test_configure_marks_legacy_debug_logs_as_migrated(self, tmp_path):
+        """Test that the one-time legacy debug-log migration writes a state marker."""
+        log_dir = tmp_path / "debug"
+        log_dir.mkdir(parents=True)
+        original_path = "/home/user/Documents/private/file.txt"
+        (log_dir / "clamui.log").write_text(
+            f"Existing debug entry for {original_path}\n",
+            encoding="utf-8",
+        )
+
+        configure_logging(log_level="DEBUG", log_dir=log_dir)
+        config = get_logging_config()
+        if config._sanitization_thread is not None:
+            config._sanitization_thread.join(timeout=2)
+
+        marker = log_dir / PRIVACY_STATE_FILENAME
+        archived_logs = sorted(log_dir.glob("clamui.log.archived-*"))
+
+        assert marker.exists()
+        assert archived_logs
+        assert not list(log_dir.glob("clamui.log.pending-redaction-*"))
+
+    def test_configure_skips_reprocessing_already_migrated_debug_logs(self, tmp_path):
+        """Test startup does not create another cleanup pass once logs are migrated."""
+        log_dir = tmp_path / "debug"
+        log_dir.mkdir(parents=True)
+        original_path = "/home/user/Documents/private/file.txt"
+        (log_dir / "clamui.log").write_text(
+            f"Existing debug entry for {original_path}\n",
+            encoding="utf-8",
+        )
+
+        configure_logging(log_level="DEBUG", log_dir=log_dir)
+        config = get_logging_config()
+        if config._sanitization_thread is not None:
+            config._sanitization_thread.join(timeout=2)
+
+        archived_before = sorted(path.name for path in log_dir.glob("clamui.log.archived-*"))
+
+        with patch.object(config, "_sanitize_existing_log_files_background") as mock_background:
+            config.configure(log_dir=log_dir, log_level="DEBUG")
+            assert not mock_background.called
+
+        archived_after = sorted(path.name for path in log_dir.glob("clamui.log.archived-*"))
+        assert archived_after == archived_before
+        assert not list(log_dir.glob("clamui.log.pending-redaction-*"))
+
+    def test_configure_processes_stale_pending_redaction_files_without_full_rescan(self, tmp_path):
+        """Test startup only finalizes pending files when migration already completed."""
+        log_dir = tmp_path / "debug"
+        log_dir.mkdir(parents=True)
+        marker = log_dir / PRIVACY_STATE_FILENAME
+        marker.write_text("1", encoding="utf-8")
+        pending_file = log_dir / "clamui.log.pending-redaction-legacy"
+        original_path = "/home/user/Documents/private/file.txt"
+        pending_file.write_text(f"Existing debug entry for {original_path}\n", encoding="utf-8")
+        clean_backup = log_dir / "clamui.log.1"
+        clean_backup.write_text(f"Existing debug entry for {REDACTED_PATH}\n", encoding="utf-8")
+
+        configure_logging(log_level="DEBUG", log_dir=log_dir)
+        config = get_logging_config()
+        if config._sanitization_thread is not None:
+            config._sanitization_thread.join(timeout=2)
+
+        archived_pending = sorted(log_dir.glob("clamui.log.archived-*"))
+        assert archived_pending
+        assert REDACTED_PATH in archived_pending[0].read_text(encoding="utf-8")
+        assert clean_backup.read_text(encoding="utf-8") == f"Existing debug entry for {REDACTED_PATH}\n"

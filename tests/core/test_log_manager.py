@@ -19,6 +19,7 @@ from src.core.log_manager import (
     LogManager,
     LogType,
 )
+from src.core.sanitize import REDACTED_PATH
 
 
 class TestLogEntry:
@@ -67,7 +68,7 @@ class TestLogEntry:
         assert entry.status == "infected"
         assert entry.summary == "Found malware"
         assert entry.details == "Detailed output here"
-        assert entry.path == "/home/user/downloads"
+        assert entry.path is None
         assert entry.duration == 15.5
 
     def test_to_dict(self):
@@ -113,7 +114,7 @@ class TestLogEntry:
         assert entry.status == "clean"
         assert entry.summary == "No threats found"
         assert entry.details == "Scan complete"
-        assert entry.path == "/home/user"
+        assert entry.path is None
         assert entry.duration == 120.5
 
     def test_from_dict_with_missing_fields(self):
@@ -215,8 +216,7 @@ class TestLogEntry:
             details="Details",
             path="/home/user\nfake/path",
         )
-        assert "\n" not in entry.path
-        assert entry.path == "/home/user fake/path"
+        assert entry.path is None
 
     def test_create_sanitizes_path_ansi_escapes(self):
         """Test LogEntry.create sanitizes ANSI escape sequences in path."""
@@ -227,8 +227,7 @@ class TestLogEntry:
             details="Details",
             path="/path/\x1b[32mwith\x1b[0m/color",
         )
-        assert "\x1b" not in entry.path
-        assert entry.path == "/path/with/color"
+        assert entry.path is None
 
     def test_create_sanitizes_details_preserves_newlines(self):
         """Test LogEntry.create preserves legitimate newlines in details field."""
@@ -290,8 +289,8 @@ class TestLogEntry:
         assert entry.summary == "Clean scanfile"
         # Details: newlines preserved, control chars removed
         assert entry.details == "Output\nLine 2green"
-        # Path: newlines become spaces, control chars removed
-        assert entry.path == "/path injection"
+        # Path storage is disabled for privacy
+        assert entry.path is None
 
     def test_from_scan_result_data_sanitizes_path(self):
         """Test from_scan_result_data sanitizes path field."""
@@ -301,12 +300,9 @@ class TestLogEntry:
             duration=10.0,
             scanned_files=5,
         )
-        # Path should be sanitized (newlines become spaces, ANSI removed)
-        assert "\n" not in entry.path
-        assert "\x1b" not in entry.path
-        assert entry.path == "/home/user malicious"
-        # Summary should also contain the sanitized path
-        assert "Clean scan of /home/user malicious" in entry.summary
+        assert entry.path is None
+        assert entry.summary == "Clean scan"
+        assert entry.details == "Scanned: 5 files, 0 directories"
 
     def test_from_scan_result_data_sanitizes_threat_details(self):
         """Test from_scan_result_data sanitizes threat details."""
@@ -329,10 +325,8 @@ class TestLogEntry:
         )
         # Details should contain sanitized threat information
         details_lines = entry.details.split("\n")
-        # Check that malicious characters are removed from file paths
-        assert any("/tmp/virus.exe" in line for line in details_lines)
-        assert any("/tmp/evil.txt" in line for line in details_lines)
-        # Check that malicious characters are removed from threat names
+        # File paths are omitted entirely, but threat names are preserved
+        assert not any("/tmp/" in line for line in details_lines)
         assert any("Trojan FakeLog.Gen" in line for line in details_lines)
         assert any("Malware.Test" in line for line in details_lines)
         # Ensure no ANSI, null bytes, bidi, or control chars in details
@@ -383,12 +377,8 @@ Scanned directories: 10
             duration=10.0,
             stdout=stdout_with_ansi,
         )
-        # ANSI codes and null bytes should be removed from details
-        assert "\x1b" not in entry.details
-        assert "\x00" not in entry.details
-        # Newlines should be preserved (multi-line field)
-        assert "Known viruses: 12345" in entry.details
-        assert "Infected files: 0" in entry.details
+        # Raw stdout is no longer persisted to avoid leaking scanned file data.
+        assert entry.details == ""
 
     def test_from_scan_result_data_log_injection_attempt(self):
         """Test from_scan_result_data prevents log injection via crafted filenames."""
@@ -406,12 +396,7 @@ Scanned directories: 10
             infected_count=1,
             threat_details=threat_details,
         )
-        # Newlines should be removed from file_path (single-line field)
-        assert "\n" not in entry.details or entry.details.count("\n") == entry.details.count(
-            "Threats found"
-        )
-        # The injected content should appear on the same line
-        assert "malware.exe [CLEAN]" in entry.details
+        assert entry.details == "Threats found: 1\n  - Virus.Win32.Test"
 
     def test_from_scan_result_data_ansi_obfuscation_attempt(self):
         """Test from_scan_result_data prevents ANSI-based obfuscation."""
@@ -429,9 +414,7 @@ Scanned directories: 10
             infected_count=1,
             threat_details=threat_details,
         )
-        # ANSI codes should be removed, revealing the full filename
-        assert "safe.txtactually_malware.exe" in entry.details
-        assert "\x1b" not in entry.details
+        assert entry.details == "Threats found: 1\n  - Trojan.Generic"
 
     def test_from_dict_sanitizes_summary(self):
         """Test from_dict sanitizes summary field from deserialized data."""
@@ -478,11 +461,7 @@ Scanned directories: 10
             "path": "/home/user\n\x1b[31m/malicious\u202e",
         }
         entry = LogEntry.from_dict(data)
-        # Path should be sanitized (single-line)
-        assert "\n" not in entry.path
-        assert "\x1b" not in entry.path
-        assert "\u202e" not in entry.path
-        assert entry.path == "/home/user /malicious"
+        assert entry.path is None
 
     def test_from_dict_sanitizes_status(self):
         """Test from_dict sanitizes status field from deserialized data."""
@@ -533,12 +512,12 @@ Scanned directories: 10
         assert "\n" not in entry.status
         assert "\n" not in entry.summary  # Log injection prevented
         assert "\x1b" not in entry.details  # ANSI obfuscation removed
-        assert "\u202e" not in entry.path  # Unicode spoofing removed
+        assert entry.path is None
 
         # Verify sanitized values
         assert entry.status == "clean infected"
         assert entry.summary == "Clean scan [ERROR] System compromised"
-        assert entry.path == "/safe/path /tmp/evil"
+        assert REDACTED_PATH in entry.details
 
 
 class TestLogManager:
@@ -560,6 +539,44 @@ class TestLogManager:
         log_dir = Path(temp_log_dir) / "subdir" / "logs"
         LogManager(log_dir=str(log_dir))
         assert log_dir.exists()
+
+    def test_get_logs_redacts_existing_sensitive_scan_paths(self, temp_log_dir):
+        """Test retroactive redaction of existing persisted scan logs."""
+        log_dir = Path(temp_log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        legacy_log = log_dir / "legacy-scan.json"
+        original_path = "/home/user/Documents/private/file.txt"
+
+        with open(legacy_log, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "id": "legacy-scan",
+                    "timestamp": "2024-01-15T10:30:00",
+                    "type": "scan",
+                    "status": "infected",
+                    "summary": f"Threat found in {original_path}",
+                    "details": f"Threat location: {original_path}",
+                    "path": original_path,
+                    "duration": 12.5,
+                },
+                f,
+                indent=2,
+            )
+
+        manager = LogManager(log_dir=temp_log_dir)
+        logs = manager.get_logs()
+
+        assert len(logs) == 1
+        assert logs[0].path is None
+        assert REDACTED_PATH in logs[0].summary
+        assert REDACTED_PATH in logs[0].details
+
+        rewritten_text = legacy_log.read_text(encoding="utf-8")
+        rewritten = json.loads(rewritten_text)
+        assert rewritten["path"] is None
+        assert REDACTED_PATH in rewritten["summary"]
+        assert REDACTED_PATH in rewritten["details"]
+        assert original_path not in rewritten_text
 
     def test_init_with_default_directory(self, monkeypatch):
         """Test LogManager uses XDG_DATA_HOME by default."""

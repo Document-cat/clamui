@@ -1,7 +1,13 @@
 # ClamUI Input Sanitization Tests
 """Unit tests for the sanitize module functions."""
 
-from src.core.sanitize import sanitize_log_line, sanitize_log_text
+from src.core.sanitize import (
+    REDACTED_PATH,
+    REDACTED_URL,
+    sanitize_log_line,
+    sanitize_log_text,
+    sanitize_path_for_logging,
+)
 
 
 class TestSanitizeLogLine:
@@ -318,6 +324,7 @@ Time: 10.123 sec (0 m 10 s)"""
         windows_text = "Line 1\r\nLine 2\r\nLine 3"
         assert sanitize_log_text(windows_text) == windows_text
 
+
     def test_sanitize_log_text_mixed_line_endings(self):
         """Test sanitize_log_text preserves mixed line endings."""
         mixed = "Line 1\nLine 2\r\nLine 3\rLine 4"
@@ -497,3 +504,35 @@ class TestSanitizationEdgeCases:
         # Filename with newline injection
         filename3 = "file.txt\nFake log entry: CLEAN"
         assert "\n" not in sanitize_log_line(filename3)
+
+
+class TestSanitizePathForLogging:
+    """Tests for path redaction in persisted and debug logs."""
+
+    def test_redacts_unix_path_with_spaces_without_swallowing_prose(self):
+        """Test Unix paths with spaces are redacted without eating trailing words."""
+        text = "Processing /home/user/My Documents/file.txt now"
+        assert sanitize_path_for_logging(text) == f"Processing {REDACTED_PATH} now"
+
+    def test_redacts_file_uri_without_swallowing_punctuation(self):
+        """Test file URIs are redacted and punctuation around them is preserved."""
+        text = "Open file:///home/user/file.txt, then continue"
+        assert sanitize_path_for_logging(text) == f"Open {REDACTED_PATH}, then continue"
+
+    def test_redacts_windows_path(self):
+        """Test Windows-style absolute paths are redacted."""
+        text = "Path C:/Users/test/file.exe should be hidden"
+        assert sanitize_path_for_logging(text) == f"Path {REDACTED_PATH} should be hidden"
+
+    def test_redacts_virustotal_report_urls(self):
+        """Test VirusTotal report URLs are replaced with the URL placeholder."""
+        text = (
+            "See https://www.virustotal.com/gui/file/"
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        assert sanitize_path_for_logging(text) == f"See {REDACTED_URL}"
+
+    def test_preserves_text_without_sensitive_markers(self):
+        """Test unrelated text is returned unchanged."""
+        text = "Logging configured successfully"
+        assert sanitize_path_for_logging(text) == text
