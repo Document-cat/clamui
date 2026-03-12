@@ -168,7 +168,7 @@ class TestScheduledScanLogPersistence:
         assert len(logs) == 1
         assert logs[0].scheduled is True
         assert logs[0].type == "scan"
-        assert logs[0].path == "/home/user/Documents"
+        assert logs[0].path is None
 
     def test_scheduled_scan_log_filters(self, temp_log_dir):
         """Test that logs can be filtered by type."""

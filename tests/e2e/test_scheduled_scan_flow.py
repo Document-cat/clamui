@@ -29,6 +29,7 @@ from src.core.quarantine.manager import (
     QuarantineManager,
     QuarantineStatus,
 )
+from src.core.sanitize import REDACTED_PATH
 from src.core.scheduler import ScheduleFrequency, Scheduler, SchedulerBackend
 from src.core.settings_manager import SettingsManager
 
@@ -591,8 +592,10 @@ class TestE2EFullWorkflow:
         assert logs[0].status == "clean"
         assert "10 files scanned" in logs[0].summary
 
-        # Verify all paths are correctly linked
-        assert str(scan_dir) in logs[0].path
+        # Persisted logs should keep scan metadata without storing the target path.
+        assert logs[0].path is None
+        assert str(scan_dir) not in logs[0].details
+        assert REDACTED_PATH in logs[0].details
         assert logs[0].duration == 5.3
 
     def test_e2e_workflow_with_threats(self, complete_env):
