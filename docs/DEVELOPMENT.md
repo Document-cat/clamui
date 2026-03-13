@@ -407,7 +407,7 @@ class TestMyFeature:
 
 | Component    | Technology                |
 |--------------|---------------------------|
-| Language     | Python 3.10+              |
+| Language     | Python 3.11+              |
 | UI Framework | GTK4 with PyGObject       |
 | UI Styling   | libadwaita (GNOME design) |
 | Testing      | pytest, pytest-cov        |
@@ -457,7 +457,7 @@ ClamUI uses GitHub Actions for CI with the following workflows:
 
 | Workflow            | Trigger         | Purpose                              |
 |---------------------|-----------------|--------------------------------------|
-| `test.yml`          | Push/PR to main | Run tests on Python 3.10, 3.11, 3.12 |
+| `test.yml`          | Push/PR to main | Run tests on Python 3.11, 3.12, 3.13 |
 | `lint.yml`          | Push/PR to main | Run Ruff linting and format checks   |
 | `build-deb.yml`     | Manual/Release  | Build Debian packages                |
 | `build-flatpak.yml` | Manual/Release  | Build Flatpak packages               |

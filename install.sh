@@ -8,7 +8,7 @@
 #   --system    Install system-wide (requires root privileges)
 #   --help      Show this help message
 #
-# Dependencies: Python 3.10+, pip/uv, GTK4, libadwaita, ClamAV
+# Dependencies: Python 3.11+, pip/uv, GTK4, libadwaita, ClamAV
 
 set -e
 
@@ -65,7 +65,7 @@ ClamUI is installed into an isolated virtual environment:
 A wrapper script is created at ~/.local/bin/clamui (or /usr/local/bin/clamui).
 
 Dependencies Required:
-    - Python 3.10 or higher
+    - Python 3.11 or higher
     - pip or uv (Python package manager)
     - GTK4 with GObject Introspection
     - libadwaita
@@ -130,7 +130,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Dependency Checking Functions
 #
 
-# Check Python version (3.10+)
+# Check Python version (3.11+)
 check_python() {
 	log_info "Checking Python..."
 
@@ -140,7 +140,7 @@ check_python() {
 	elif command -v python >/dev/null 2>&1; then
 		PYTHON_CMD="python"
 	else
-		log_error "Python not found. Please install Python 3.10 or higher."
+		log_error "Python not found. Please install Python 3.11 or higher."
 		return 1
 	fi
 
@@ -149,8 +149,8 @@ check_python() {
 	PYTHON_MAJOR=$($PYTHON_CMD -c 'import sys; print(sys.version_info.major)')
 	PYTHON_MINOR=$($PYTHON_CMD -c 'import sys; print(sys.version_info.minor)')
 
-	if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]; }; then
-		log_error "Python 3.10+ required. Found: $PYTHON_VERSION"
+	if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 11 ]; }; then
+		log_error "Python 3.11+ required. Found: $PYTHON_VERSION"
 		return 1
 	fi
 

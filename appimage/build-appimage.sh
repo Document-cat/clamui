@@ -53,7 +53,7 @@ This script builds a portable AppImage for ClamUI.
 
 Prerequisites:
     - wget
-    - Python 3.10+
+    - Python 3.11+
     - GTK4/libadwaita system packages (python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1)
     - pip (python3-pip)
     - FUSE (libfuse2) for running AppImages

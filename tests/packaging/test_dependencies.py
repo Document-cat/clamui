@@ -45,13 +45,13 @@ class TestDebianControlVsPyproject:
         pyproject_content = pyproject.read_text()
         control_content = control.read_text()
 
-        # pyproject.toml should have requires-python >= 3.10
-        assert ">=3.10" in pyproject_content or ">= 3.10" in pyproject_content, (
-            "pyproject.toml should require Python 3.10+"
+        # pyproject.toml should have requires-python >= 3.11
+        assert ">=3.11" in pyproject_content or ">= 3.11" in pyproject_content, (
+            "pyproject.toml should require Python 3.11+"
         )
 
-        # Debian control should have python3 >= 3.10
-        assert "python3 (>= 3.10)" in control_content, "Debian control should require Python 3.10+"
+        # Debian control should have python3 >= 3.11
+        assert "python3 (>= 3.11)" in control_content, "Debian control should require Python 3.11+"
 
     def test_requests_version_aligned(self):
         """Test requests library version is aligned."""

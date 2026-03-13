@@ -8,7 +8,7 @@ ClamUI is a modern Linux desktop application providing a graphical user interfac
 
 **Key Facts:**
 
-- Python 3.10+ required
+- Python 3.11+ required
 - GTK4/Adwaita UI framework
 - ClamAV integration via subprocess (clamscan, clamdscan, freshclam)
 - Supports both native and Flatpak installations
@@ -811,7 +811,7 @@ The `scan_backend` setting determines how ClamUI communicates with ClamAV to per
 
 ### test.yml
 
-- Runs on Python 3.10, 3.11, 3.12
+- Runs on Python 3.11, 3.12, 3.13
 - Uses xvfb for headless GTK testing
 - Uploads coverage report on Python 3.12
 
@@ -1017,7 +1017,7 @@ See `appimage/build-appimage.sh` for detailed build configuration.
 ### Packaging Notes
 
 - Flatpak uses `--filesystem=host` (read-write) for full scanning capability and quarantine operations
-- Debian packages require Python 3.10+
+- Debian packages require Python 3.11+
 - AppImage bundles Python + GTK4/libadwaita (~96 MB), requires host ClamAV installation
 - urllib3>=2.6.3 required for CVE fix (decompression-bomb bypass on redirects)
 

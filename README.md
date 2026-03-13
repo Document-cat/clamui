@@ -292,7 +292,7 @@ ClamUI requires the following components to be installed on your system:
 <td>For the graphical interface</td>
 </tr>
 <tr>
-<td><strong>Python 3.10+</strong></td>
+<td><strong>Python 3.11+</strong></td>
 <td>With PyGObject bindings</td>
 </tr>
 </table>
