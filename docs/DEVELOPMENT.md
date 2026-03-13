@@ -128,6 +128,9 @@ All subcommands support `--json` output for scripting integration.
 ClamUI includes a comprehensive test suite with pytest. The project enforces a minimum of **50% code coverage** with a
 target of **80%+** for comprehensive coverage.
 
+Plain `pytest` runs are optimized for local iteration and do not enable coverage by default. Run coverage explicitly
+when you need it locally or for CI-style verification.
+
 ### Test Dependencies
 
 Test dependencies are included in the `[dev]` optional dependencies:
@@ -144,11 +147,12 @@ pip install -e ".[dev]"
 
 | Command                             | Description                 |
 |-------------------------------------|-----------------------------|
-| `pytest`                            | Run all tests               |
+| `pytest`                            | Run all tests (fast local default, no coverage) |
 | `pytest -v`                         | Run with verbose output     |
 | `pytest tests/core/`                | Run specific test directory |
 | `pytest tests/core/test_scanner.py` | Run specific test file      |
 | `pytest -k "test_scanner"`          | Run tests matching pattern  |
+| `pytest --ignore=tests/e2e`         | Run the default CI test scope without e2e        |
 
 ### Running Tests with Coverage
 
@@ -253,7 +257,7 @@ pytest
 # Show slowest tests
 pytest --durations=10
 
-# Full suite should complete in under 30 seconds
+# Use this to spot runtime regressions across the full suite
 pytest --durations=0
 ```
 

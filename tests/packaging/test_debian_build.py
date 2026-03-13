@@ -33,7 +33,7 @@ class TestVersionExtraction:
     def test_version_in_pyproject(self):
         """Test that version is defined in pyproject.toml."""
         pyproject = PROJECT_ROOT / "pyproject.toml"
-        content = pyproject.read_text()
+        content = pyproject.read_text(encoding="utf-8")
 
         # Should have a version line
         assert re.search(r'^version\s*=\s*["\']', content, re.MULTILINE), (
@@ -43,7 +43,7 @@ class TestVersionExtraction:
     def test_version_format_semantic(self):
         """Test version follows semantic versioning (X.Y.Z)."""
         pyproject = PROJECT_ROOT / "pyproject.toml"
-        content = pyproject.read_text()
+        content = pyproject.read_text(encoding="utf-8")
 
         # Extract version
         match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
@@ -85,7 +85,7 @@ class TestAbsoluteImportValidation:
         pattern = re.compile(r"^(from|import)\s+src\.", re.MULTILINE)
 
         for py_file in py_files:
-            content = py_file.read_text()
+            content = py_file.read_text(encoding="utf-8")
             if pattern.search(content):
                 violations.append(str(py_file.relative_to(PROJECT_ROOT)))
 
@@ -100,7 +100,7 @@ class TestAbsoluteImportValidation:
 
         files_with_relative = []
         for py_file in src_dir.rglob("*.py"):
-            content = py_file.read_text()
+            content = py_file.read_text(encoding="utf-8")
             if relative_pattern.search(content):
                 files_with_relative.append(py_file.name)
 
@@ -126,7 +126,7 @@ class TestLauncherScript:
     def test_launcher_uses_clamui_module(self):
         """Test launcher imports from clamui, not src."""
         build_script = PROJECT_ROOT / "debian" / "build-deb.sh"
-        content = build_script.read_text()
+        content = build_script.read_text(encoding="utf-8")
 
         # The launcher script in build-deb.sh should use 'clamui.main'
         assert "clamui.main" in content, "Launcher should import from 'clamui.main', not 'src.main'"
@@ -151,7 +151,7 @@ class TestPackageStructure:
     def test_control_has_required_fields(self):
         """Test control file has required Debian fields."""
         control = PROJECT_ROOT / "debian" / "DEBIAN" / "control"
-        content = control.read_text()
+        content = control.read_text(encoding="utf-8")
 
         required_fields = [
             "Package:",
@@ -170,7 +170,7 @@ class TestPackageStructure:
     def test_control_version_placeholder(self):
         """Test control file has VERSION placeholder."""
         control = PROJECT_ROOT / "debian" / "DEBIAN" / "control"
-        content = control.read_text()
+        content = control.read_text(encoding="utf-8")
 
         # Should have VERSION placeholder that gets substituted
         assert "Version: VERSION" in content or re.search(r"Version:\s*\d", content), (
@@ -180,14 +180,14 @@ class TestPackageStructure:
     def test_package_name_is_clamui(self):
         """Test package name in control is 'clamui'."""
         control = PROJECT_ROOT / "debian" / "DEBIAN" / "control"
-        content = control.read_text()
+        content = control.read_text(encoding="utf-8")
 
         assert "Package: clamui" in content, "Package name should be 'clamui'"
 
     def test_architecture_is_all(self):
         """Test architecture is 'all' (pure Python)."""
         control = PROJECT_ROOT / "debian" / "DEBIAN" / "control"
-        content = control.read_text()
+        content = control.read_text(encoding="utf-8")
 
         assert "Architecture: all" in content, (
             "Architecture should be 'all' for pure Python package"
@@ -196,7 +196,7 @@ class TestPackageStructure:
     def test_build_script_installs_dolphin_service_menus_to_kio_and_legacy_paths(self):
         """Test Debian build script packages Dolphin service menus for KDE6 and KDE5."""
         build_script = PROJECT_ROOT / "debian" / "build-deb.sh"
-        content = build_script.read_text()
+        content = build_script.read_text(encoding="utf-8")
 
         assert "/usr/share/kio/servicemenus" in content
         assert "/usr/share/kservices5/ServiceMenus" in content
@@ -213,7 +213,7 @@ class TestMaintainerScripts:
     def test_postinst_is_valid_shell(self):
         """Test postinst is valid shell script."""
         postinst = PROJECT_ROOT / "debian" / "DEBIAN" / "postinst"
-        content = postinst.read_text()
+        content = postinst.read_text(encoding="utf-8")
 
         # Should start with shebang
         assert content.startswith("#!/"), "postinst should start with shebang"
@@ -254,7 +254,7 @@ class TestExcludesPycache:
     def test_build_script_excludes_pycache(self):
         """Test build script excludes __pycache__ directories."""
         build_script = PROJECT_ROOT / "debian" / "build-deb.sh"
-        content = build_script.read_text()
+        content = build_script.read_text(encoding="utf-8")
 
         # Should exclude __pycache__
         assert "__pycache__" in content, "Build script should handle __pycache__ exclusion"
@@ -262,7 +262,7 @@ class TestExcludesPycache:
     def test_build_script_excludes_pyc_files(self):
         """Test build script excludes .pyc files."""
         build_script = PROJECT_ROOT / "debian" / "build-deb.sh"
-        content = build_script.read_text()
+        content = build_script.read_text(encoding="utf-8")
 
         # Should exclude .pyc files
         assert ".pyc" in content, "Build script should handle .pyc file exclusion"

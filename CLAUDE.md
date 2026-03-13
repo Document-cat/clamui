@@ -204,7 +204,7 @@ uv run clamui
 ### Testing
 
 ```bash
-# Run full test suite with coverage
+# Run full test suite (fast local default, no coverage)
 pytest
 
 # Run specific test file
