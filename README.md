@@ -123,9 +123,11 @@ flatpak run io.github.linx_systems.ClamUI
 ```bash
 git clone https://github.com/linx-systems/clamui.git
 cd clamui
-uv sync
-uv run clamui
+./scripts/local-run.sh
 ```
+
+On Ubuntu/Pop!_OS 22.04, use `./scripts/local-run.sh` instead of raw `uv sync`. Newer
+`PyGObject` releases require GLib 2.80+, while 22.04 ships GLib 2.72.
 
 > **More Installation Options:** See the [Installation Guide](./docs/INSTALL.md) for .deb packages and system-wide installation
 

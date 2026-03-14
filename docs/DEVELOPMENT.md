@@ -70,6 +70,16 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync --dev
 ```
 
+> **Ubuntu/Pop!_OS 22.04 note:** `uv sync` may resolve `PyGObject 3.50+`, which needs
+> GLib 2.80+. Jammy ships GLib 2.72, so create the venv manually and preinstall a
+> compatible PyGObject first:
+>
+> ```bash
+> uv venv --python 3.11
+> uv pip install --python .venv/bin/python "PyGObject<3.50"
+> uv pip install --python .venv/bin/python -e ".[dev]"
+> ```
+
 Alternatively, use pip:
 
 ```bash

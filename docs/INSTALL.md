@@ -205,6 +205,10 @@ cd clamui
 ./scripts/local-run.sh
 ```
 
+On Ubuntu/Pop!_OS 22.04, `local-run.sh` automatically installs `PyGObject<3.50`. Newer
+PyGObject releases require GLib 2.80+, while 22.04 ships GLib 2.72 and
+`libgirepository1.0-dev`.
+
 ### Download and Install
 
 Download the latest `.deb` package from the [releases page](https://github.com/linx-systems/clamui/releases), then

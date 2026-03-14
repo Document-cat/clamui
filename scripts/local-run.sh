@@ -22,6 +22,22 @@ for arg in "$@"; do
     esac
 done
 
+use_legacy_pygobject_install() {
+    if [ ! -f /etc/os-release ]; then
+        return 1
+    fi
+
+    . /etc/os-release
+
+    case "${ID}:${VERSION_ID:-}" in
+        ubuntu:22.04|pop:22.04)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
 install_deps_debian() {
     echo "Installing dependencies for Debian/Ubuntu..."
 
@@ -86,6 +102,18 @@ install_dependencies() {
     fi
 }
 
+install_python_dependencies() {
+    if use_legacy_pygobject_install; then
+        echo "Ubuntu/Pop!_OS 22.04 detected. Installing PyGObject<3.50 for GLib 2.72 compatibility..."
+        uv venv --python 3.11
+        uv pip install --python .venv/bin/python "PyGObject<3.50"
+        uv pip install --python .venv/bin/python -e .
+        return
+    fi
+
+    uv sync --no-dev
+}
+
 # Check for uv
 if ! command -v uv &>/dev/null; then
     echo "Error: 'uv' is not installed."
@@ -105,7 +133,7 @@ fi
 
 # Sync Python dependencies and run
 echo "Syncing Python dependencies..."
-uv sync
+install_python_dependencies
 
 echo "Starting ClamUI..."
-uv run clamui "$@"
+uv run --no-sync clamui "$@"
