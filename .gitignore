@@ -97,7 +97,8 @@ clamui.zip
 .env.*
 *.env
 
-# Claude Code sandbox stubs (empty read-only files blocking writes to git internals)
+# Claude Code sandbox stubs (read-only device files blocking writes to protected paths)
+.vscode
 HEAD
 config
 hooks
