@@ -31,19 +31,19 @@
     <screenshots>
         <screenshot type="default">
             <caption>Main application window</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/main_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/main_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Scan results display</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/main_view_with_scan_result.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/main_view_with_scan_result.png</image>
         </screenshot>
         <screenshot>
             <caption>Analysis view</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/analysis_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/analysis_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Components view</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/components_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/components_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Configuration settings</caption>
@@ -51,15 +51,15 @@
         </screenshot>
         <screenshot>
             <caption>Scan history</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/history_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/history_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Profile management</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/profile_management.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/profile_management.png</image>
         </screenshot>
         <screenshot>
             <caption>Quarantine management</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.4/screenshots/quarantine_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/quarantine_view.png</image>
         </screenshot>
     </screenshots>
 
@@ -96,6 +96,20 @@
     </keywords>
 
     <releases>
+        <release version="0.1.5" date="2026-03-16">
+            <description>
+                <p>CLI pipeline, security hardening, and broad compatibility improvements</p>
+                <ul>
+                    <li>Full CLI subcommand pipeline: scan, status, history, quarantine, profile, and preferences</li>
+                    <li>Security: fix CVE-2026-31899 (cairosvg), bump urllib3/numpy, add CodeQL and Dependabot</li>
+                    <li>Privacy-safe scan logs that no longer persist file-identifying data</li>
+                    <li>Ubuntu 22.04 / Pop!_OS compatibility for PyGObject &lt; 3.50 and GLib 2.72</li>
+                    <li>Dolphin (Plasma 6) file manager integration and Adwaita icon theme enforcement</li>
+                    <li>Hardened preferences save flow, tray updates, and daemon exclusion handling</li>
+                    <li>Dropped Python 3.10 — minimum is now Python 3.11</li>
+                </ul>
+            </description>
+        </release>
         <release version="0.1.4" date="2026-02-26">
             <description>
                 <p>Internationalization, auto-scan on device mount, and multi-distro support</p>
