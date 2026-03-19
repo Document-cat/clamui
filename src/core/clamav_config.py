@@ -4,6 +4,7 @@ ClamAV configuration file parser and writer.
 Supports reading and modifying freshclam.conf and clamd.conf files.
 """
 
+import logging
 import os
 import shutil
 import subprocess
@@ -12,6 +13,11 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# System path prefixes that are inaccessible from inside a Flatpak sandbox
+_SYSTEM_PATH_PREFIXES = ("/etc/", "/usr/", "/var/", "/opt/")
 
 
 @dataclass
@@ -324,33 +330,53 @@ def parse_config(file_path: str) -> tuple[ClamAVConfig | None, str | None]:
     except (OSError, RuntimeError) as e:
         return (None, f"Invalid file path: {e!s}")
 
-    # Check if file exists
-    if not resolved_path.exists():
-        return (None, f"Configuration file not found: {file_path}")
+    # Determine if we need to read across the Flatpak sandbox boundary.
+    # System paths (/etc, /usr, /var, /opt) don't exist inside the sandbox,
+    # so we must use flatpak-spawn --host cat to read them from the host.
+    from .flatpak import is_flatpak, read_host_file
 
-    # Check if it's a file (not a directory)
-    if not resolved_path.is_file():
-        return (None, f"Path is not a file: {file_path}")
+    use_host_read = is_flatpak() and any(
+        str(resolved_path).startswith(prefix) for prefix in _SYSTEM_PATH_PREFIXES
+    )
 
-    # Check if file is readable
-    if not os.access(resolved_path, os.R_OK):
-        return (None, f"Permission denied: Cannot read {file_path}")
+    if use_host_read:
+        # In Flatpak: use config_file_exists() which already handles
+        # flatpak-spawn --host test -f, then read via flatpak-spawn --host cat
+        from .clamav_detection import config_file_exists
 
-    # Read and parse the file
-    try:
-        with open(resolved_path, encoding="utf-8") as f:
-            raw_lines = f.readlines()
-    except UnicodeDecodeError:
-        # Try with latin-1 encoding as fallback
+        if not config_file_exists(str(resolved_path)):
+            return (None, f"Configuration file not found: {file_path}")
+
+        content, error = read_host_file(str(resolved_path))
+        if error or content is None:
+            return (None, error or f"Failed to read {file_path}")
+
+        raw_lines = content.splitlines(keepends=True)
+        logger.debug("Read config via flatpak-spawn: %s (%d lines)", file_path, len(raw_lines))
+    else:
+        # Native path or user-writable path in Flatpak: direct file I/O
+        if not resolved_path.exists():
+            return (None, f"Configuration file not found: {file_path}")
+
+        if not resolved_path.is_file():
+            return (None, f"Path is not a file: {file_path}")
+
+        if not os.access(resolved_path, os.R_OK):
+            return (None, f"Permission denied: Cannot read {file_path}")
+
         try:
-            with open(resolved_path, encoding="latin-1") as f:
+            with open(resolved_path, encoding="utf-8") as f:
                 raw_lines = f.readlines()
-        except Exception as e:
+        except UnicodeDecodeError:
+            try:
+                with open(resolved_path, encoding="latin-1") as f:
+                    raw_lines = f.readlines()
+            except Exception as e:
+                return (None, f"Error reading configuration file: {e!s}")
+        except PermissionError:
+            return (None, f"Permission denied: Cannot read {file_path}")
+        except OSError as e:
             return (None, f"Error reading configuration file: {e!s}")
-    except PermissionError:
-        return (None, f"Permission denied: Cannot read {file_path}")
-    except OSError as e:
-        return (None, f"Error reading configuration file: {e!s}")
 
     # Create config object
     config = ClamAVConfig(file_path=resolved_path, raw_lines=raw_lines)

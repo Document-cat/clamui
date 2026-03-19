@@ -156,9 +156,9 @@ class TestRequiredPermissions:
 
         finish_args = data.get("finish-args", [])
 
-        assert (
-            "--talk-name=org.a11y.Bus" not in finish_args
-        ), "Manifest should not request explicit org.a11y.Bus access"
+        assert "--talk-name=org.a11y.Bus" not in finish_args, (
+            "Manifest should not request explicit org.a11y.Bus access"
+        )
 
 
 class TestModulesSection:

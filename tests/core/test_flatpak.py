@@ -669,3 +669,250 @@ class TestGetXdgUserDir:
                 for dir_type in valid_types:
                     result = flatpak.get_xdg_user_dir(dir_type)
                     assert result == "/home/user/test"
+
+
+class TestIsPortalPath:
+    """Tests for is_portal_path() function."""
+
+    def test_user_doc_path(self):
+        """Test detection of /run/user/<uid>/doc/ portal paths."""
+        assert flatpak.is_portal_path("/run/user/1000/doc/751f8b64/scan.conf") is True
+
+    def test_flatpak_doc_path(self):
+        """Test detection of /run/flatpak/doc/ portal paths."""
+        assert flatpak.is_portal_path("/run/flatpak/doc/abc123/file.conf") is True
+
+    def test_non_portal_path(self):
+        """Test that regular paths are not portal paths."""
+        assert flatpak.is_portal_path("/etc/clamav/clamd.conf") is False
+
+    def test_home_path(self):
+        """Test that home paths are not portal paths."""
+        assert flatpak.is_portal_path("/home/user/.config/clamui/settings.json") is False
+
+    def test_partial_match(self):
+        """Test that partial matches don't count."""
+        assert flatpak.is_portal_path("/run/user/1000/something") is False
+
+    def test_empty_string(self):
+        """Test empty string."""
+        assert flatpak.is_portal_path("") is False
+
+
+class TestResolvePortalPath:
+    """Tests for resolve_portal_path() function."""
+
+    def test_non_portal_path_returns_none(self):
+        """Test that non-portal paths return None immediately."""
+        result = flatpak.resolve_portal_path("/etc/clamav/clamd.conf")
+        assert result is None
+
+    def test_tries_all_methods(self):
+        """Test that all resolution methods are tried in order."""
+        portal = "/run/user/1000/doc/abc123/scan.conf"
+
+        with (
+            mock.patch.object(flatpak, "_resolve_portal_path_via_xattr", return_value=None) as m1,
+            mock.patch.object(flatpak, "_resolve_portal_path_via_gio", return_value=None) as m2,
+            mock.patch.object(
+                flatpak, "_resolve_portal_path_via_dbus", return_value="/etc/clamd.d/scan.conf"
+            ) as m3,
+        ):
+            result = flatpak.resolve_portal_path(portal)
+            assert result == "/etc/clamd.d/scan.conf"
+            m1.assert_called_once_with(portal)
+            m2.assert_called_once_with(portal)
+            m3.assert_called_once_with(portal)
+
+    def test_returns_first_successful_resolution(self):
+        """Test that the first successful method wins."""
+        portal = "/run/user/1000/doc/abc123/scan.conf"
+
+        with (
+            mock.patch.object(
+                flatpak, "_resolve_portal_path_via_xattr", return_value="/etc/clamd.d/scan.conf"
+            ),
+            mock.patch.object(flatpak, "_resolve_portal_path_via_gio") as m2,
+            mock.patch.object(flatpak, "_resolve_portal_path_via_dbus") as m3,
+        ):
+            result = flatpak.resolve_portal_path(portal)
+            assert result == "/etc/clamd.d/scan.conf"
+            m2.assert_not_called()
+            m3.assert_not_called()
+
+    def test_all_methods_fail(self):
+        """Test that None is returned when all methods fail."""
+        portal = "/run/user/1000/doc/abc123/scan.conf"
+
+        with (
+            mock.patch.object(flatpak, "_resolve_portal_path_via_xattr", return_value=None),
+            mock.patch.object(flatpak, "_resolve_portal_path_via_gio", return_value=None),
+            mock.patch.object(flatpak, "_resolve_portal_path_via_dbus", return_value=None),
+        ):
+            result = flatpak.resolve_portal_path(portal)
+            assert result is None
+
+
+class TestReadHostFile:
+    """Tests for read_host_file() function."""
+
+    def test_native_reads_file_directly(self, tmp_path):
+        """Test that native mode reads files with normal I/O."""
+        test_file = tmp_path / "test.conf"
+        test_file.write_text("DatabaseDirectory /var/lib/clamav\n")
+
+        with mock.patch.object(flatpak, "is_flatpak", return_value=False):
+            content, error = flatpak.read_host_file(str(test_file))
+
+        assert error is None
+        assert content == "DatabaseDirectory /var/lib/clamav\n"
+
+    def test_native_file_not_found(self):
+        """Test native mode with non-existent file."""
+        with mock.patch.object(flatpak, "is_flatpak", return_value=False):
+            content, error = flatpak.read_host_file("/nonexistent/file.conf")
+
+        assert content is None
+        assert "not found" in error.lower()
+
+    def test_native_permission_denied(self, tmp_path):
+        """Test native mode with unreadable file."""
+        test_file = tmp_path / "secret.conf"
+        test_file.write_text("secret")
+        test_file.chmod(0o000)
+
+        try:
+            with mock.patch.object(flatpak, "is_flatpak", return_value=False):
+                content, error = flatpak.read_host_file(str(test_file))
+
+            assert content is None
+            assert "permission" in error.lower()
+        finally:
+            test_file.chmod(0o644)
+
+    def test_native_latin1_fallback(self, tmp_path):
+        """Test that native mode falls back to latin-1 for non-UTF-8 files."""
+        test_file = tmp_path / "latin.conf"
+        test_file.write_bytes(b"# Comment with \xe9\n")
+
+        with mock.patch.object(flatpak, "is_flatpak", return_value=False):
+            content, error = flatpak.read_host_file(str(test_file))
+
+        assert error is None
+        assert content is not None
+
+    def test_flatpak_uses_spawn(self):
+        """Test that Flatpak mode uses flatpak-spawn --host cat."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = b"DatabaseDirectory /var/lib/clamav\n"
+
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            content, error = flatpak.read_host_file("/etc/clamd.d/scan.conf")
+
+        assert error is None
+        assert content == "DatabaseDirectory /var/lib/clamav\n"
+        mock_run.assert_called_once_with(
+            ["flatpak-spawn", "--host", "cat", "/etc/clamd.d/scan.conf"],
+            capture_output=True,
+            text=False,
+            timeout=10,
+        )
+
+    def test_flatpak_spawn_failure(self):
+        """Test Flatpak mode when flatpak-spawn returns an error."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 1
+        mock_result.stderr = b"cat: /etc/clamd.d/scan.conf: No such file or directory"
+
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", return_value=mock_result),
+        ):
+            content, error = flatpak.read_host_file("/etc/clamd.d/scan.conf")
+
+        assert content is None
+        assert "Cannot read" in error
+
+    def test_flatpak_spawn_timeout(self):
+        """Test Flatpak mode when flatpak-spawn times out."""
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch(
+                "subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="cat", timeout=10)
+            ),
+        ):
+            content, error = flatpak.read_host_file("/etc/clamd.d/scan.conf")
+
+        assert content is None
+        assert "timeout" in error.lower()
+
+    def test_flatpak_utf8_decode(self):
+        """Test that Flatpak mode decodes UTF-8 output correctly."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "# Комментарий\n".encode()
+
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", return_value=mock_result),
+        ):
+            content, error = flatpak.read_host_file("/etc/clamav/clamd.conf")
+
+        assert error is None
+        assert "Комментарий" in content
+
+    def test_flatpak_latin1_fallback(self):
+        """Test that Flatpak mode falls back to latin-1 for non-UTF-8 output."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = b"# Comment with \xe9\n"
+
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", return_value=mock_result),
+        ):
+            content, error = flatpak.read_host_file("/etc/clamav/clamd.conf")
+
+        assert error is None
+        assert content is not None
+
+    def test_custom_timeout(self):
+        """Test that custom timeout is passed to subprocess."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = b"content"
+
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", return_value=mock_result) as mock_run,
+        ):
+            flatpak.read_host_file("/etc/test.conf", timeout=30)
+
+        assert mock_run.call_args[1]["timeout"] == 30
+
+    def test_flatpak_spawn_binary_not_found(self):
+        """Test Flatpak mode when flatpak-spawn binary is missing from PATH."""
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", side_effect=FileNotFoundError("flatpak-spawn")),
+        ):
+            content, error = flatpak.read_host_file("/etc/clamd.d/scan.conf")
+
+        assert content is None
+        assert "flatpak-spawn not available" in error
+
+    def test_flatpak_spawn_unexpected_error(self):
+        """Test Flatpak mode when subprocess raises an unexpected error."""
+        with (
+            mock.patch.object(flatpak, "is_flatpak", return_value=True),
+            mock.patch("subprocess.run", side_effect=OSError("broken pipe")),
+        ):
+            content, error = flatpak.read_host_file("/etc/clamd.d/scan.conf")
+
+        assert content is None
+        assert "Error reading" in error
+        assert "broken pipe" in error

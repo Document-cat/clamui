@@ -4,6 +4,7 @@
 import contextlib
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -1068,3 +1069,154 @@ class TestWriteConfigsWithElevation:
             error
             == "Authorization failed. Administrator permission is required to apply these changes."
         )
+
+
+class TestParseConfigFlatpak:
+    """Tests for parse_config() Flatpak-aware file reading."""
+
+    def test_system_path_in_flatpak_uses_host_read(self):
+        """Test that system paths in Flatpak use read_host_file."""
+        config_content = "DatabaseDirectory /var/lib/clamav\nLogVerbose yes\n"
+
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+                return_value=(config_content, None),
+            ) as mock_read,
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=True),
+        ):
+            config, error = parse_config("/etc/clamd.d/scan.conf")
+
+        assert error is None
+        assert config is not None
+        assert config.get_value("DatabaseDirectory") == "/var/lib/clamav"
+        assert config.get_value("LogVerbose") == "yes"
+        mock_read.assert_called_once_with("/etc/clamd.d/scan.conf")
+
+    def test_system_path_in_flatpak_file_not_found(self):
+        """Test that missing system files in Flatpak return proper error."""
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=False),
+        ):
+            config, error = parse_config("/etc/clamd.d/scan.conf")
+
+        assert config is None
+        assert "not found" in error.lower()
+
+    def test_system_path_in_flatpak_read_error(self):
+        """Test that read errors from flatpak-spawn are propagated."""
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+                return_value=(None, "Permission denied: Cannot read /etc/clamd.d/scan.conf"),
+            ),
+        ):
+            config, error = parse_config("/etc/clamd.d/scan.conf")
+
+        assert config is None
+        assert "permission denied" in error.lower()
+
+    def test_user_path_in_flatpak_uses_direct_io(self, tmp_path):
+        """Test that user-writable paths in Flatpak use direct I/O."""
+        config_file = tmp_path / "freshclam.conf"
+        config_file.write_text("DatabaseDirectory /home/user/.clamav\n")
+
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+            ) as mock_read,
+        ):
+            config, error = parse_config(str(config_file))
+
+        assert error is None
+        assert config is not None
+        assert config.get_value("DatabaseDirectory") == "/home/user/.clamav"
+        mock_read.assert_not_called()
+
+    def test_native_ignores_flatpak_logic(self, tmp_path):
+        """Test that non-Flatpak mode uses direct I/O for all paths."""
+        config_file = tmp_path / "clamd.conf"
+        config_file.write_text("LogVerbose yes\n")
+
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=False),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+            ) as mock_read,
+        ):
+            config, error = parse_config(str(config_file))
+
+        assert error is None
+        assert config is not None
+        mock_read.assert_not_called()
+
+    def test_var_path_in_flatpak_uses_host_read(self):
+        """Test /var/ paths are treated as system paths in Flatpak."""
+        config_content = "# empty config\n"
+
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+                return_value=(config_content, None),
+            ),
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=True),
+        ):
+            config, error = parse_config("/var/lib/clamav/clamd.conf")
+
+        assert error is None
+        assert config is not None
+
+    def test_usr_path_in_flatpak_uses_host_read(self):
+        """Test /usr/ paths are treated as system paths in Flatpak."""
+        config_content = "# usr config\n"
+
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+                return_value=(config_content, None),
+            ),
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=True),
+        ):
+            config, error = parse_config("/usr/local/etc/clamd.conf")
+
+        assert error is None
+        assert config is not None
+
+    def test_opt_path_in_flatpak_uses_host_read(self):
+        """Test /opt/ paths are treated as system paths in Flatpak."""
+        config_content = "# opt config\n"
+
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+                return_value=(config_content, None),
+            ),
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=True),
+        ):
+            config, error = parse_config("/opt/clamav/etc/clamd.conf")
+
+        assert error is None
+        assert config is not None
+
+    def test_system_path_host_read_returns_none_content_no_error(self):
+        """Test fallback message when read_host_file returns (None, None)."""
+        with (
+            mock.patch("src.core.flatpak.is_flatpak", return_value=True),
+            mock.patch("src.core.clamav_detection.config_file_exists", return_value=True),
+            mock.patch(
+                "src.core.flatpak.read_host_file",
+                return_value=(None, None),
+            ),
+        ):
+            config, error = parse_config("/etc/clamd.d/scan.conf")
+
+        assert config is None
+        assert "Failed to read" in error

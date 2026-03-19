@@ -598,3 +598,109 @@ def format_flatpak_portal_path(path: str) -> str:
         return f"[Portal] {relative_path}"
 
     return path
+
+
+def is_portal_path(path: str) -> bool:
+    """
+    Check if a path is a Flatpak document portal path.
+
+    Portal paths are created by the Flatpak document portal when files are
+    selected through a file picker inside the sandbox.
+
+    Args:
+        path: Filesystem path to check
+
+    Returns:
+        True if the path is a document portal path, False otherwise.
+    """
+    return bool(re.match(r"/run/(?:user/\d+|flatpak)/doc/", path))
+
+
+def resolve_portal_path(portal_path: str) -> str | None:
+    """
+    Resolve a Flatpak document portal path to its real host filesystem path.
+
+    Tries multiple resolution methods in order:
+    1. Extended attributes (xattr)
+    2. GIO file attributes
+    3. D-Bus document portal query
+
+    Args:
+        portal_path: A Flatpak document portal path
+
+    Returns:
+        The resolved host path, or None if resolution fails.
+    """
+    if not is_portal_path(portal_path):
+        return None
+
+    resolved = _resolve_portal_path_via_xattr(portal_path)
+    if not resolved:
+        resolved = _resolve_portal_path_via_gio(portal_path)
+    if not resolved:
+        resolved = _resolve_portal_path_via_dbus(portal_path)
+
+    return resolved
+
+
+def read_host_file(file_path: str, timeout: int = 10) -> tuple[str | None, str | None]:
+    """
+    Read a file, using flatpak-spawn to cross the sandbox boundary when needed.
+
+    In Flatpak, system paths (e.g. /etc/clamd.d/scan.conf) are not accessible
+    inside the sandbox. This function uses `flatpak-spawn --host cat` to read
+    such files from the host filesystem.
+
+    Outside Flatpak, falls back to direct file I/O.
+
+    Args:
+        file_path: Path to the file to read
+        timeout: Timeout in seconds for the subprocess call
+
+    Returns:
+        Tuple of (content, error):
+        - (content_string, None) on success
+        - (None, error_message) on failure
+    """
+    if is_flatpak():
+        try:
+            result = subprocess.run(
+                ["flatpak-spawn", "--host", "cat", file_path],
+                capture_output=True,
+                text=False,
+                timeout=timeout,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace").strip()
+                return (None, f"Cannot read {file_path}: {stderr}")
+
+            # Decode with UTF-8, fall back to latin-1
+            try:
+                content = result.stdout.decode("utf-8")
+            except UnicodeDecodeError:
+                content = result.stdout.decode("latin-1")
+
+            return (content, None)
+        except subprocess.TimeoutExpired:
+            return (None, f"Timeout reading {file_path}")
+        except FileNotFoundError:
+            return (None, "flatpak-spawn not available")
+        except Exception as e:
+            return (None, f"Error reading {file_path}: {e!s}")
+    else:
+        # Native: direct file I/O
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                return (f.read(), None)
+        except UnicodeDecodeError:
+            try:
+                with open(file_path, encoding="latin-1") as f:
+                    return (f.read(), None)
+            except Exception as e:
+                return (None, f"Error reading {file_path}: {e!s}")
+        except PermissionError:
+            return (None, f"Permission denied: Cannot read {file_path}")
+        except FileNotFoundError:
+            return (None, f"File not found: {file_path}")
+        except OSError as e:
+            return (None, f"Error reading {file_path}: {e!s}")

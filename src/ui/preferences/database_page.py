@@ -24,6 +24,12 @@ except (TypeError, AttributeError):
     _HAS_FILE_DIALOG = False
 
 from ...core.clamav_detection import detect_freshclam_conf_path
+from ...core.flatpak import (
+    format_flatpak_portal_path,
+    is_flatpak,
+    is_portal_path,
+    resolve_portal_path,
+)
 from ...core.i18n import N_, _
 from ..compat import create_entry_row, create_switch_row
 from ..utils import resolve_icon_name
@@ -215,6 +221,7 @@ class DatabasePage(PreferencesPageMixin):
                     sm = getattr(parent_window, "_settings_manager", None)
                     if sm:
                         sm.set("freshclam_conf_path", detected)
+                    parent_window._reload_freshclam_config()
                     toast = Adw.Toast.new(_("Detected: {path}").format(path=detected))
                     parent_window.add_toast(toast)
                 else:
@@ -275,12 +282,25 @@ class DatabasePage(PreferencesPageMixin):
 
         def _apply_selection(file_path):
             if file_path:
-                path_row.set_subtitle(file_path)
-                setattr(parent_window, attr_name, file_path)
+                # In Flatpak, resolve portal paths to real host paths
+                stored_path = file_path
+                display_path = file_path
+                if is_flatpak() and is_portal_path(file_path):
+                    resolved = resolve_portal_path(file_path)
+                    if resolved:
+                        stored_path = resolved
+                        display_path = resolved
+                    else:
+                        display_path = format_flatpak_portal_path(file_path)
+
+                path_row.set_subtitle(display_path)
+                setattr(parent_window, attr_name, stored_path)
                 sm = getattr(parent_window, "_settings_manager", None)
                 if sm:
-                    sm.set(settings_key, file_path)
-                toast = Adw.Toast.new(_("Selected: {path}").format(path=file_path))
+                    sm.set(settings_key, stored_path)
+                if attr_name == "_freshclam_conf_path":
+                    parent_window._reload_freshclam_config()
+                toast = Adw.Toast.new(_("Selected: {path}").format(path=display_path))
                 parent_window.add_toast(toast)
 
         if _HAS_FILE_DIALOG:

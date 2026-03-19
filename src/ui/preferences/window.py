@@ -625,6 +625,47 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
                 logger.exception("Unexpected error loading clamd.conf: %s", e)
                 self._clamd_load_error = str(e)
 
+    def _reload_clamd_config(self):
+        """
+        Re-parse clamd.conf after the path has changed.
+
+        Updates _clamd_config and _clamd_load_error, then repopulates
+        UI fields if the relevant pages have been created.
+        """
+        logger.debug("Reloading clamd config from: %s", self._clamd_conf_path)
+        try:
+            self._clamd_config, error = parse_config(self._clamd_conf_path)
+            if error:
+                logger.warning("Failed to reload clamd.conf: %s", error)
+                self._clamd_load_error = error
+            else:
+                self._clamd_load_error = None
+            self._populate_clamd_fields()
+            self._populate_onaccess_fields()
+        except Exception as e:
+            logger.exception("Unexpected error reloading clamd.conf: %s", e)
+            self._clamd_load_error = str(e)
+
+    def _reload_freshclam_config(self):
+        """
+        Re-parse freshclam.conf after the path has changed.
+
+        Updates _freshclam_config and _freshclam_load_error, then repopulates
+        UI fields if the database page has been created.
+        """
+        logger.debug("Reloading freshclam config from: %s", self._freshclam_conf_path)
+        try:
+            self._freshclam_config, error = parse_config(self._freshclam_conf_path)
+            if error:
+                logger.warning("Failed to reload freshclam.conf: %s", error)
+                self._freshclam_load_error = error
+            else:
+                self._freshclam_load_error = None
+            self._populate_freshclam_fields()
+        except Exception as e:
+            logger.exception("Unexpected error reloading freshclam.conf: %s", e)
+            self._freshclam_load_error = str(e)
+
     def _populate_freshclam_fields(self):
         """
         Populate freshclam configuration fields from loaded config.
