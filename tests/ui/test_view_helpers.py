@@ -211,9 +211,10 @@ class TestCreateEmptyState:
         assert widget.append.call_count == 3
 
     def test_with_custom_icon_size(self, view_helpers_module):
-        """Test create_empty_state with custom icon size."""
+        """Test create_empty_state with custom icon size sets pixel size."""
         create_empty_state = view_helpers_module.create_empty_state
         EmptyStateConfig = view_helpers_module.EmptyStateConfig
+        Gtk = view_helpers_module.Gtk
 
         config = EmptyStateConfig(
             icon_name="document-open-recent-symbolic",
@@ -221,13 +222,13 @@ class TestCreateEmptyState:
             icon_size=64,
         )
 
-        widget = create_empty_state(config)
+        create_empty_state(config)
 
-        # Widget created successfully
-        assert widget is not None
+        # Verify the image got the custom pixel size
+        Gtk.Image.return_value.set_pixel_size.assert_called_with(64)
 
     def test_with_custom_margins(self, view_helpers_module):
-        """Test create_empty_state with custom margins."""
+        """Test create_empty_state with custom margins sets margin values."""
         create_empty_state = view_helpers_module.create_empty_state
         EmptyStateConfig = view_helpers_module.EmptyStateConfig
 
@@ -239,13 +240,22 @@ class TestCreateEmptyState:
 
         widget = create_empty_state(config)
 
-        # Widget created successfully with custom margins
-        assert widget is not None
+        # Verify custom margins were applied to the box
+        widget.set_margin_top.assert_called_with(36)
+        widget.set_margin_bottom.assert_called_with(36)
 
     def test_with_title_css_class(self, view_helpers_module):
-        """Test create_empty_state with title CSS class."""
+        """Test create_empty_state with title CSS class creates extra label styling."""
         create_empty_state = view_helpers_module.create_empty_state
         EmptyStateConfig = view_helpers_module.EmptyStateConfig
+        Gtk = view_helpers_module.Gtk
+
+        # Track label mocks created via side_effect
+        label_mocks = []
+        original_side_effect = Gtk.Label.side_effect
+        Gtk.Label.side_effect = lambda *a, **k: (
+            label_mocks.append(mock.MagicMock()) or label_mocks[-1]
+        )
 
         config = EmptyStateConfig(
             icon_name="document-open-recent-symbolic",
@@ -253,15 +263,21 @@ class TestCreateEmptyState:
             title_css_class="heading",
         )
 
-        widget = create_empty_state(config)
+        create_empty_state(config)
 
-        # Widget created successfully
-        assert widget is not None
+        # Title label (first one) should have "heading" CSS class added
+        assert len(label_mocks) >= 1
+        title_label = label_mocks[0]
+        css_calls = [c[0][0] for c in title_label.add_css_class.call_args_list]
+        assert "heading" in css_calls
+
+        Gtk.Label.side_effect = original_side_effect
 
     def test_center_horizontally(self, view_helpers_module):
-        """Test create_empty_state with horizontal centering."""
+        """Test create_empty_state with horizontal centering sets halign."""
         create_empty_state = view_helpers_module.create_empty_state
         EmptyStateConfig = view_helpers_module.EmptyStateConfig
+        Gtk = view_helpers_module.Gtk
 
         config = EmptyStateConfig(
             icon_name="document-open-recent-symbolic",
@@ -271,13 +287,20 @@ class TestCreateEmptyState:
 
         widget = create_empty_state(config)
 
-        # Widget created successfully
-        assert widget is not None
+        # Verify horizontal alignment was set on the box
+        widget.set_halign.assert_called_with(Gtk.Align.CENTER)
 
     def test_wrap_subtitle(self, view_helpers_module):
-        """Test create_empty_state with subtitle wrapping."""
+        """Test create_empty_state with subtitle wrapping calls set_wrap."""
         create_empty_state = view_helpers_module.create_empty_state
         EmptyStateConfig = view_helpers_module.EmptyStateConfig
+        Gtk = view_helpers_module.Gtk
+
+        # Track label mocks to verify subtitle wrapping
+        label_mocks = []
+        Gtk.Label.side_effect = lambda *a, **k: (
+            label_mocks.append(mock.MagicMock()) or label_mocks[-1]
+        )
 
         config = EmptyStateConfig(
             icon_name="document-open-recent-symbolic",
@@ -286,15 +309,24 @@ class TestCreateEmptyState:
             wrap_subtitle=True,
         )
 
-        widget = create_empty_state(config)
+        create_empty_state(config)
 
-        # Widget created successfully with wrap enabled
-        assert widget is not None
+        # Subtitle label (second one) should have set_wrap(True)
+        assert len(label_mocks) == 2
+        subtitle_label = label_mocks[1]
+        subtitle_label.set_wrap.assert_called_with(True)
 
     def test_max_subtitle_chars(self, view_helpers_module):
-        """Test create_empty_state with max subtitle chars."""
+        """Test create_empty_state with max subtitle chars calls set_max_width_chars."""
         create_empty_state = view_helpers_module.create_empty_state
         EmptyStateConfig = view_helpers_module.EmptyStateConfig
+        Gtk = view_helpers_module.Gtk
+
+        # Track label mocks to verify max width chars
+        label_mocks = []
+        Gtk.Label.side_effect = lambda *a, **k: (
+            label_mocks.append(mock.MagicMock()) or label_mocks[-1]
+        )
 
         config = EmptyStateConfig(
             icon_name="document-open-recent-symbolic",
@@ -303,10 +335,13 @@ class TestCreateEmptyState:
             max_subtitle_chars=50,
         )
 
-        widget = create_empty_state(config)
+        create_empty_state(config)
 
-        # Widget created successfully with max width chars
-        assert widget is not None
+        # Subtitle label should have max width chars and center justification
+        assert len(label_mocks) == 2
+        subtitle_label = label_mocks[1]
+        subtitle_label.set_max_width_chars.assert_called_with(50)
+        subtitle_label.set_justify.assert_called_once()
 
 
 # =============================================================================
@@ -318,22 +353,28 @@ class TestCreateLoadingRow:
     """Tests for the create_loading_row() function."""
 
     def test_creates_loading_row(self, view_helpers_module):
-        """Test create_loading_row creates a list box row."""
+        """Test create_loading_row creates a non-selectable, non-activatable row."""
         create_loading_row = view_helpers_module.create_loading_row
 
         row = create_loading_row("Loading...")
 
-        # Verify row was created
-        assert row is not None
+        # Verify row is non-interactive
+        row.set_selectable.assert_called_once_with(False)
+        row.set_activatable.assert_called_once_with(False)
+        # Verify a child widget was set on the row
+        row.set_child.assert_called_once()
 
     def test_custom_margin_vertical(self, view_helpers_module):
-        """Test create_loading_row with custom margin."""
+        """Test create_loading_row with custom margin applies it to the box."""
         create_loading_row = view_helpers_module.create_loading_row
 
         row = create_loading_row("Loading...", margin_vertical=36)
 
-        # Verify row was created with custom margin
-        assert row is not None
+        # The loading box inside the row should have custom margins
+        # We verify via the row's set_child call - the box passed to it
+        child_box = row.set_child.call_args[0][0]
+        child_box.set_margin_top.assert_called_with(36)
+        child_box.set_margin_bottom.assert_called_with(36)
 
     def test_row_not_selectable(self, view_helpers_module):
         """Test create_loading_row creates non-selectable row."""
@@ -354,13 +395,14 @@ class TestCreateLoadingRow:
         row.set_activatable.assert_called_once_with(False)
 
     def test_spinner_spinning(self, view_helpers_module):
-        """Test create_loading_row creates a spinning spinner."""
+        """Test create_loading_row sets spinner to spinning."""
         create_loading_row = view_helpers_module.create_loading_row
+        Gtk = view_helpers_module.Gtk
 
-        row = create_loading_row("Loading...")
+        create_loading_row("Loading...")
 
-        # Row created successfully (spinner setup happens internally)
-        assert row is not None
+        # Verify the spinner was set to spinning
+        Gtk.Spinner.return_value.set_spinning.assert_called_with(True)
 
 
 # =============================================================================
@@ -530,91 +572,99 @@ class TestCreateHeaderButtonBox:
         assert box.append.call_count == 2
 
     def test_with_icon_name(self, view_helpers_module):
-        """Test button with icon_name."""
+        """Test button with icon_name calls set_icon_name."""
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
+        Gtk = view_helpers_module.Gtk
 
         buttons = [HeaderButton(icon_name="view-refresh-symbolic")]
 
-        box, spinner = create_header_button_box(buttons=buttons)
+        create_header_button_box(buttons=buttons)
 
-        # Verify button was created and appended
-        assert box is not None
+        # Verify set_icon_name was called on the created button
+        Gtk.Button.return_value.set_icon_name.assert_called_once()
 
     def test_with_label(self, view_helpers_module):
-        """Test button with label."""
+        """Test button with label calls set_label."""
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
+        Gtk = view_helpers_module.Gtk
 
         buttons = [HeaderButton(label="Refresh")]
 
-        box, spinner = create_header_button_box(buttons=buttons)
+        create_header_button_box(buttons=buttons)
 
-        # Verify button was created
-        assert box is not None
+        # Verify set_label was called on the created button
+        Gtk.Button.return_value.set_label.assert_called_once_with("Refresh")
 
     def test_with_tooltip(self, view_helpers_module):
-        """Test button with tooltip."""
+        """Test button with tooltip calls set_tooltip_text."""
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
+        Gtk = view_helpers_module.Gtk
 
         buttons = [HeaderButton(icon_name="view-refresh-symbolic", tooltip="Refresh data")]
 
-        box, spinner = create_header_button_box(buttons=buttons)
+        create_header_button_box(buttons=buttons)
 
-        # Verify button was created
-        assert box is not None
+        # Verify tooltip was set on the button
+        Gtk.Button.return_value.set_tooltip_text.assert_called_once_with("Refresh data")
 
     def test_with_css_classes(self, view_helpers_module):
-        """Test button with CSS classes."""
+        """Test button with CSS classes adds them."""
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
+        Gtk = view_helpers_module.Gtk
 
         buttons = [
             HeaderButton(icon_name="view-refresh-symbolic", css_classes=["suggested-action"])
         ]
 
-        box, spinner = create_header_button_box(buttons=buttons)
+        create_header_button_box(buttons=buttons)
 
-        # Verify button was created
-        assert box is not None
+        # Verify CSS classes were added (flat + suggested-action)
+        css_calls = [c[0][0] for c in Gtk.Button.return_value.add_css_class.call_args_list]
+        assert "flat" in css_calls
+        assert "suggested-action" in css_calls
 
     def test_with_sensitive_false(self, view_helpers_module):
-        """Test button with sensitive=False."""
+        """Test button with sensitive=False disables the button."""
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
+        Gtk = view_helpers_module.Gtk
 
         buttons = [HeaderButton(icon_name="view-refresh-symbolic", sensitive=False)]
 
-        box, spinner = create_header_button_box(buttons=buttons)
+        create_header_button_box(buttons=buttons)
 
-        # Verify button was created
-        assert box is not None
+        # Verify button was set to insensitive
+        Gtk.Button.return_value.set_sensitive.assert_called_with(False)
 
     def test_with_callback(self, view_helpers_module):
-        """Test button with callback connected."""
+        """Test button with callback connects it to 'clicked' signal."""
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
+        Gtk = view_helpers_module.Gtk
 
         callback = mock.MagicMock()
         buttons = [HeaderButton(icon_name="view-refresh-symbolic", callback=callback)]
 
-        box, spinner = create_header_button_box(buttons=buttons)
+        create_header_button_box(buttons=buttons)
 
-        # Verify button was created (callback connected internally)
-        assert box is not None
+        # Verify callback was connected to "clicked" signal
+        Gtk.Button.return_value.connect.assert_called_once_with("clicked", callback)
 
     def test_with_pre_created_widget(self, view_helpers_module):
-        """Test with pre-created widget instead of HeaderButton."""
+        """Test with pre-created widget appends it directly."""
         create_header_button_box = view_helpers_module.create_header_button_box
+        Gtk = view_helpers_module.Gtk
 
-        existing_button = view_helpers_module.Gtk.Button()
-        existing_button.set_label("Existing")
+        existing_button = Gtk.Button()
 
-        box, spinner = create_header_button_box(buttons=[existing_button])
+        box, _ = create_header_button_box(buttons=[existing_button])
 
-        # Verify box created and existing button appended
-        assert box is not None
+        # Verify the pre-created button was appended to the box
+        box.append.assert_called_once_with(existing_button)
 
     def test_include_spinner(self, view_helpers_module):
         """Test include_spinner adds a spinner."""
@@ -646,41 +696,41 @@ class TestCreateRefreshHeader:
         assert button is not None
 
     def test_custom_tooltip(self, view_helpers_module):
-        """Test create_refresh_header with custom tooltip."""
+        """Test create_refresh_header with custom tooltip sets it on button."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        header_box, spinner, button = create_refresh_header(
+        _, _, button = create_refresh_header(
             on_refresh_clicked=mock.MagicMock(),
             tooltip="Refresh statistics",
         )
 
-        # Verify components created with custom tooltip
-        assert button is not None
+        # Verify custom tooltip was set on the refresh button
+        button.set_tooltip_text.assert_called_with("Refresh statistics")
 
     def test_spinner_hidden_by_default(self, view_helpers_module):
         """Test spinner is hidden by default."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
+        _, spinner, _ = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
-        # Verify spinner was created (hidden state set internally)
-        assert spinner is not None
+        # Verify spinner starts hidden
+        spinner.set_visible.assert_called_with(False)
 
     def test_button_has_icon(self, view_helpers_module):
-        """Test button has refresh icon."""
+        """Test button has refresh icon set."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
+        _, _, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
-        # Verify button was created (icon set internally)
-        assert button is not None
+        # Verify refresh icon was set on the button
+        button.set_icon_name.assert_called_once()
 
     def test_button_connects_callback(self, view_helpers_module):
         """Test button connects callback to clicked signal."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
         callback = mock.MagicMock()
-        header_box, spinner, button = create_refresh_header(on_refresh_clicked=callback)
+        _, _, button = create_refresh_header(on_refresh_clicked=callback)
 
-        # Verify button was created (callback connected internally)
-        assert button is not None
+        # Verify callback was connected to the "clicked" signal
+        button.connect.assert_called_once_with("clicked", callback)
