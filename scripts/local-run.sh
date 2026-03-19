@@ -2,24 +2,35 @@
 # local-run.sh - Install dependencies and run ClamUI from source
 #
 # Usage:
-#   ./local-run.sh          # Install deps + run
-#   ./local-run.sh --deps   # Only install dependencies
-#   ./local-run.sh --run    # Only run (skip dep check)
+#   ./local-run.sh                      # Install deps + run
+#   ./local-run.sh --deps               # Only install dependencies
+#   ./local-run.sh --run                # Only run (skip system dep check)
+#   ./local-run.sh --run -- /path/file  # Pass args through to ClamUI
 
 set -e
 
 DEPS_ONLY=false
 SKIP_DEPS=false
+APP_ARGS=()
 
-for arg in "$@"; do
-    case $arg in
+while [ "$#" -gt 0 ]; do
+    case "$1" in
         --deps)
             DEPS_ONLY=true
             ;;
         --run)
             SKIP_DEPS=true
             ;;
+        --)
+            shift
+            APP_ARGS+=("$@")
+            break
+            ;;
+        *)
+            APP_ARGS+=("$1")
+            ;;
     esac
+    shift
 done
 
 use_legacy_pygobject_install() {
@@ -136,4 +147,4 @@ echo "Syncing Python dependencies..."
 install_python_dependencies
 
 echo "Starting ClamUI..."
-uv run --no-sync clamui "$@"
+uv run --no-sync clamui "${APP_ARGS[@]}"
