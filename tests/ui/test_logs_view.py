@@ -178,13 +178,10 @@ class TestLogsViewImport:
                 "src.ui.fullscreen_dialog": mock.MagicMock(),
             },
         ):
-            from src.ui.logs_view import (
-                INITIAL_LOG_DISPLAY_LIMIT,
-                LOAD_MORE_LOG_BATCH_SIZE,
-            )
+            from src.ui.pagination import PaginatedListController
 
-            assert INITIAL_LOG_DISPLAY_LIMIT == 25
-            assert LOAD_MORE_LOG_BATCH_SIZE == 25
+            assert PaginatedListController.DEFAULT_INITIAL_LIMIT == 25
+            assert PaginatedListController.DEFAULT_BATCH_SIZE == 25
 
 
 class TestLogsViewInitialization:
@@ -1459,18 +1456,15 @@ def test_logs_view_basic(mock_gi_modules):
     This test verifies the core LogsView functionality
     using the centralized mock setup.
     """
-    from src.ui.logs_view import (
-        INITIAL_LOG_DISPLAY_LIMIT,
-        LOAD_MORE_LOG_BATCH_SIZE,
-        LogsView,
-    )
+    from src.ui.logs_view import LogsView
+    from src.ui.pagination import PaginatedListController
 
     # Test 1: Class can be imported
     assert LogsView is not None
 
     # Test 2: Pagination constants are correct
-    assert INITIAL_LOG_DISPLAY_LIMIT == 25
-    assert LOAD_MORE_LOG_BATCH_SIZE == 25
+    assert PaginatedListController.DEFAULT_INITIAL_LIMIT == 25
+    assert PaginatedListController.DEFAULT_BATCH_SIZE == 25
 
     # Test 3: Create mock instance and test CSV formatting
     view = object.__new__(LogsView)

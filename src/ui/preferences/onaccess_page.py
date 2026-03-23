@@ -6,11 +6,7 @@ This module provides the OnAccessPage class which handles the UI and logic
 for configuring ClamAV on-access scanning settings (clamonacc).
 """
 
-import logging
-
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")

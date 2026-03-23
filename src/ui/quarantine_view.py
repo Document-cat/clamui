@@ -9,11 +9,8 @@ Provides the quarantine management interface with:
 - Cleanup for old entries
 """
 
-import logging
 import time
 from datetime import datetime
-
-logger = logging.getLogger(__name__)
 
 import gi
 
@@ -33,9 +30,18 @@ from .pagination import PaginatedListController
 from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import EmptyStateConfig, create_empty_state, create_loading_row
 
-# Backward compatibility constants for tests
-INITIAL_DISPLAY_LIMIT = PaginatedListController.DEFAULT_INITIAL_LIMIT
-LOAD_MORE_BATCH_SIZE = PaginatedListController.DEFAULT_BATCH_SIZE
+
+class _QuarantinePaginationController(PaginatedListController):
+    """Custom pagination controller that uses the view's filtered entries."""
+
+    def __init__(self, view, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._view = view
+
+    @property
+    def entries_to_display(self):
+        """Use the view's entries_to_display property for filtering support."""
+        return self._view._entries_to_display
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -104,19 +110,7 @@ class QuarantineView(Gtk.Box):
         # Set up the UI (this creates self._listbox and self._scrolled)
         self._setup_ui()
 
-        # Create custom pagination controller that uses view's entries_to_display
-        # We need to create a custom controller that can access the view's filtered entries
-        class QuarantinePaginationController(PaginatedListController):
-            def __init__(controller_self, view, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                controller_self._view = view
-
-            @property
-            def entries_to_display(controller_self):
-                """Use the view's entries_to_display property for filtering support."""
-                return controller_self._view._entries_to_display
-
-        self._pagination = QuarantinePaginationController(
+        self._pagination = _QuarantinePaginationController(
             self,
             listbox=self._listbox,
             scrolled_window=self._scrolled,

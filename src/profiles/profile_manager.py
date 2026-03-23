@@ -219,8 +219,8 @@ class ProfileManager:
                 with open(settings_path, encoding="utf-8") as f:
                     settings = json.load(f)
                     return settings.get("_migrations", {})
-            except (json.JSONDecodeError, OSError):
-                pass
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to load migration state: %s", e)
         return {}
 
     def _save_migration_state(self, state: dict[str, int]) -> None:
@@ -236,8 +236,8 @@ class ProfileManager:
             try:
                 with open(settings_path, encoding="utf-8") as f:
                     settings = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Could not read settings before saving migration state: %s", e)
 
         settings["_migrations"] = state
 

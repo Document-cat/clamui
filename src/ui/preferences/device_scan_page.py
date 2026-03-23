@@ -7,8 +7,6 @@ Settings are auto-saved immediately on change (app-level settings,
 not clamd.conf), following the same pattern as BehaviorPage.
 """
 
-import logging
-
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -19,8 +17,6 @@ from ...core.i18n import _
 from ..compat import create_switch_row
 from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin, create_spin_row, styled_prefix_icon
-
-logger = logging.getLogger(__name__)
 
 # Device type definitions: (setting_value, icon, title, subtitle)
 DEVICE_TYPE_ROWS = [

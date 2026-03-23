@@ -157,10 +157,10 @@ class TestQuarantineViewImport:
                 "src.core.quarantine": mock.MagicMock(),
             },
         ):
-            from src.ui.quarantine_view import INITIAL_DISPLAY_LIMIT, LOAD_MORE_BATCH_SIZE
+            from src.ui.pagination import PaginatedListController
 
-            assert INITIAL_DISPLAY_LIMIT == 25
-            assert LOAD_MORE_BATCH_SIZE == 25
+            assert PaginatedListController.DEFAULT_INITIAL_LIMIT == 25
+            assert PaginatedListController.DEFAULT_BATCH_SIZE == 25
 
 
 class TestFormatFileSize:
@@ -979,9 +979,8 @@ def test_quarantine_view_basic(mock_gi_modules):
             "src.core.quarantine": mock.MagicMock(),
         },
     ):
+        from src.ui.pagination import PaginatedListController
         from src.ui.quarantine_view import (
-            INITIAL_DISPLAY_LIMIT,
-            LOAD_MORE_BATCH_SIZE,
             QuarantineView,
             format_file_size,
         )
@@ -990,8 +989,8 @@ def test_quarantine_view_basic(mock_gi_modules):
         assert QuarantineView is not None
 
         # Test 2: Pagination constants are correct
-        assert INITIAL_DISPLAY_LIMIT == 25
-        assert LOAD_MORE_BATCH_SIZE == 25
+        assert PaginatedListController.DEFAULT_INITIAL_LIMIT == 25
+        assert PaginatedListController.DEFAULT_BATCH_SIZE == 25
 
         # Test 3: format_file_size function works
         assert format_file_size(0) == "0 B"

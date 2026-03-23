@@ -6,11 +6,7 @@ This module provides the ExclusionsPage class which handles the UI and logic
 for managing scan exclusion patterns, including preset and custom exclusions.
 """
 
-import logging
-
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")

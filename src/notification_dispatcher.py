@@ -6,11 +6,7 @@ This module handles desktop notifications, scan result notifications,
 and notification-related UI interactions.
 """
 
-import logging
-
 from .core.i18n import _
-
-logger = logging.getLogger(__name__)
 
 
 class NotificationDispatcher:

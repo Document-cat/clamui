@@ -3,7 +3,11 @@
 Dialog components for creating and editing scan profiles.
 """
 
+import logging
+
 import gi
+
+logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -1352,8 +1356,8 @@ class ProfileListDialog(Adw.Window):
             from pathlib import Path
 
             self._profile_manager.export_profile(profile_id, Path(file_path))
-        except (ValueError, OSError):
-            pass
+        except (ValueError, OSError) as e:
+            logger.warning("Failed to export profile: %s", e)
 
     def _on_profile_saved(self, profile: "ScanProfile"):
         """
@@ -1400,5 +1404,5 @@ class ProfileListDialog(Adw.Window):
 
             self._profile_manager.import_profile(Path(file_path))
             self._refresh_profile_list()
-        except (ValueError, OSError):
-            pass
+        except (ValueError, OSError) as e:
+            logger.warning("Failed to import profile: %s", e)

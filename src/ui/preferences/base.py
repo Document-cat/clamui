@@ -442,8 +442,8 @@ def populate_int_field(config, widgets_dict: dict, key: str) -> None:
     if config.has_key(key):
         try:
             set_widget_value(widgets_dict, key, int(config.get_value(key)))
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug("Invalid integer value for config key '%s': %s", key, e)
 
 
 def populate_text_field(config, widgets_dict: dict, key: str) -> None:

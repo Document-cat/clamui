@@ -1116,6 +1116,7 @@ class ScanView(Gtk.Box):
             return True  # Continue pulsing
 
         self._pulse_timeout_id = GLib.timeout_add(100, pulse_callback)
+        return None
 
     def _stop_progress_pulse(self):
         """Stop the progress bar pulsing animation and hide progress section."""

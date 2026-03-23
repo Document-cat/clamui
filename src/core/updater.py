@@ -332,8 +332,8 @@ class FreshclamUpdater:
             if pid_result.returncode == 0 and pid_result.stdout.strip():
                 pid = pid_result.stdout.strip().split()[0]
                 return True, pid
-        except Exception:
-            pass  # Best-effort check; proceed with update if anything goes wrong
+        except Exception as e:
+            logger.debug("Failed to check if freshclam is running: %s", e)
         return False, None
 
     def _create_result(

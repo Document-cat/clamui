@@ -1994,8 +1994,8 @@ class LogManager:
                 return (False, "Timeout reading log file")
             except FileNotFoundError:
                 pass  # Fall through to journalctl
-            except OSError:
-                pass  # Fall through to journalctl
+            except OSError as e:
+                logger.debug("OSError reading daemon log via tail: %s", e)
 
         # Try journalctl as fallback (works on systemd systems, no root needed)
         journalctl_result = self._read_daemon_logs_journalctl(num_lines)

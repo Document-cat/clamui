@@ -6,12 +6,9 @@ This module provides the DatabasePage class which handles the UI and logic
 for configuring ClamAV database update settings (freshclam.conf).
 """
 
-import logging
 from urllib.parse import urlparse
 
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")

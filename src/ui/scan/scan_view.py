@@ -10,7 +10,6 @@ This is the composition root that wires together:
 - ScanResultsWidget: Results button
 """
 
-import logging
 import os
 import tempfile
 from pathlib import Path
@@ -34,8 +33,6 @@ from .scan_controller import ScanController, ScanState
 from .scan_progress_widget import ScanProgressWidget
 from .scan_results_widget import ScanResultsWidget
 from .target_selector import TargetSelector
-
-logger = logging.getLogger(__name__)
 
 EICAR_TEST_STRING = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
@@ -346,7 +343,7 @@ class ScanView(Gtk.Box):
     def _check_database(self) -> bool:
         from ...core.clamav_detection import check_database_available
 
-        available, error = check_database_available()
+        available, _error = check_database_available()
         if not available:
             from ..database_missing_dialog import DatabaseMissingDialog
 

@@ -11,8 +11,11 @@ This module provides functions for:
 """
 
 import contextlib
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from .flatpak import format_flatpak_portal_path
 
@@ -292,7 +295,7 @@ def get_path_info(path: str) -> dict:
 
         info["readable"] = os.access(resolved, os.R_OK)
 
-    except (OSError, RuntimeError):
-        pass
+    except (OSError, RuntimeError) as e:
+        logger.debug("Failed to get path info for '%s': %s", path, e)
 
     return info

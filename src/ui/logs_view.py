@@ -20,10 +20,6 @@ from .pagination import PaginatedListController
 from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import EmptyStateConfig, create_empty_state, create_loading_row
 
-# Backward compatibility constants for tests
-INITIAL_LOG_DISPLAY_LIMIT = PaginatedListController.DEFAULT_INITIAL_LIMIT
-LOAD_MORE_LOG_BATCH_SIZE = PaginatedListController.DEFAULT_BATCH_SIZE
-
 
 class ClearLogsDialog(Adw.Window):
     """
