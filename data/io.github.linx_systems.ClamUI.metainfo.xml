@@ -96,7 +96,7 @@
     </keywords>
 
     <releases>
-        <release version="0.1.15b" date="2026-03-23">
+        <release version="0.1.5b" date="2026-03-23">
             <description>
                 <p>Bug fixes, Flatpak hardening, and test coverage improvements</p>
                 <ul>
