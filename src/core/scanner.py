@@ -328,7 +328,8 @@ class Scanner:
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     env=get_clean_env(),
                 )
 
