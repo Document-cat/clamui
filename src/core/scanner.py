@@ -483,7 +483,7 @@ class Scanner:
                         file_count += 1
         except (PermissionError, OSError):
             # If we can't access the directory, return 0
-            pass
+            return file_count
 
         return file_count
 

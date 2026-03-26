@@ -297,11 +297,14 @@ class TestDaemonScannerProgressParsing:
             return ("\n".join(lines), "", False)
 
         with patch("src.core.daemon_scanner.stream_process_output", side_effect=fake_stream):
-            _, _, _, files_scanned, infected_count, infected_files = scanner._scan_with_progress(
+            scan_result = scanner._scan_with_progress(
                 process=MagicMock(),
                 progress_callback=progress_events.append,
                 files_total=10,
             )
+            files_scanned = scan_result[3]
+            infected_count = scan_result[4]
+            infected_files = scan_result[5]
 
         assert files_scanned == 1
         assert infected_count == 1

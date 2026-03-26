@@ -364,7 +364,7 @@ class SecureFileHandler:
                 )
             except ValueError:
                 # Path is not relative to this protected directory, continue checking
-                pass
+                continue
 
         # Check each component of the path for symlinks that might escape
         # to protected directories
@@ -388,7 +388,7 @@ class SecureFileHandler:
                             )
                         except ValueError:
                             # Not in this protected directory, continue
-                            pass
+                            continue
 
                 except (OSError, RuntimeError) as e:
                     return (False, f"Error resolving symlink in path: {e}")

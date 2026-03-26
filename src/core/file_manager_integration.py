@@ -211,13 +211,13 @@ def _check_integration_status(
             return status, missing
 
         legacy_files = _get_dolphin_legacy_integrations(local_share)
-        legacy_status, _legacy_missing = _check_integration_files(local_share, legacy_files)
+        legacy_status = _check_integration_files(local_share, legacy_files)[0]
         if legacy_status != IntegrationStatus.NOT_INSTALLED:
             # Treat legacy-only installs as partial so Apply repairs them into
             # the current service menu path on Plasma 6 systems.
             return (
                 IntegrationStatus.PARTIAL,
-                [dest_rel for _source_name, dest_rel in preferred_files],
+                [file_entry[1] for file_entry in preferred_files],
             )
         return status, missing
     else:
@@ -235,12 +235,12 @@ def _check_integration_files(
     missing = []
     installed_count = 0
 
-    for _source_name, dest_rel in files:
-        dest_path = local_share / dest_rel
+    for file_entry in files:
+        dest_path = local_share / file_entry[1]
         if dest_path.exists():
             installed_count += 1
         else:
-            missing.append(dest_rel)
+            missing.append(file_entry[1])
 
     if installed_count == 0:
         return IntegrationStatus.NOT_INSTALLED, missing
@@ -295,8 +295,8 @@ def _set_integration_permissions(
 
 def _remove_legacy_dolphin_files(local_share: Path) -> None:
     """Remove Dolphin service menu files from the non-preferred KDE path."""
-    for _source_name, dest_rel in _get_dolphin_legacy_integrations(local_share):
-        dest_path = local_share / dest_rel
+    for file_entry in _get_dolphin_legacy_integrations(local_share):
+        dest_path = local_share / file_entry[1]
         if dest_path.exists():
             dest_path.unlink()
             logger.info("Removed stale Dolphin integration: %s", dest_path)
@@ -572,8 +572,8 @@ def remove_integration(file_manager: FileManager) -> tuple[bool, str | None]:
         return False, _("Unknown file manager: {name}").format(name=file_manager)
 
     try:
-        for _source_name, dest_rel in files:
-            dest_path = local_share / dest_rel
+        for file_entry in files:
+            dest_path = local_share / file_entry[1]
 
             if dest_path.exists():
                 dest_path.unlink()

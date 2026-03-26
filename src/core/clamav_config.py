@@ -249,12 +249,12 @@ class ClamAVConfig:
         line_updates: dict[int, str] = {}
         value_indices: dict[str, int] = {}
 
-        for key, _value_list in self.values.items():
+        for key, _ in self.values.items():
             value_indices[key] = 0
 
         # First pass: identify which lines need updating based on parsed values
         for key, value_list in self.values.items():
-            for _idx, config_value in enumerate(value_list):
+            for _, config_value in enumerate(value_list):
                 if config_value.line_number > 0:
                     # This value has a known line number - update that line
                     if config_value.value:
@@ -735,7 +735,7 @@ def backup_config(file_path: str) -> None:
         shutil.copy2(path, backup_path)
     except (OSError, PermissionError):
         # Silently fail - backup is best effort
-        pass
+        logger.debug("Failed to create ClamAV config backup at %s", backup_path, exc_info=True)
 
 
 def _path_needs_elevation(file_path: Path) -> bool:
@@ -916,7 +916,9 @@ done
                 try:
                     os.unlink(tmp_path)
                 except OSError:
-                    pass
+                    logger.debug(
+                        "Failed to remove temporary config file %s", tmp_path, exc_info=True
+                    )
 
     except FileNotFoundError:
         return (False, "pkexec not found - cannot elevate privileges")

@@ -396,7 +396,7 @@ class ProfileDialog(Adw.Window):
                 return
             self._process_selected_targets(files)
         except GLib.Error:
-            pass  # User cancelled
+            return  # User cancelled
 
     def _on_target_folders_selected(self, dialog, result):
         """Handle multiple folder selection for targets."""
@@ -406,7 +406,7 @@ class ProfileDialog(Adw.Window):
                 return
             self._process_selected_targets(files)
         except GLib.Error:
-            pass  # User cancelled
+            return  # User cancelled
 
     def _process_selected_targets(self, files):
         """Process selected files/folders and add to target list."""
@@ -434,7 +434,7 @@ class ProfileDialog(Adw.Window):
                         self._add_exclusion_path_to_list(path)
 
         except GLib.Error:
-            pass  # User cancelled
+            return  # User cancelled
 
     def _add_target_to_list(self, path: str):
         """Add a target path to the list UI."""
@@ -1304,7 +1304,7 @@ class ProfileListDialog(Adw.Window):
                 self._refresh_profile_list()
             except ValueError:
                 # Cannot delete default profile - should not happen since button is disabled
-                pass
+                logger.debug("Attempted to delete a protected default profile", exc_info=True)
 
     def _on_use_profile_clicked(self, profile: "ScanProfile"):
         """

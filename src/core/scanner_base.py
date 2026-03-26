@@ -207,7 +207,7 @@ def stream_process_output(
                 break
 
             # Use select to wait for data with timeout
-            readable, _, _ = select.select([stdout_fd], [], [], poll_interval)
+            readable = select.select([stdout_fd], [], [], poll_interval)[0]
 
             if readable:
                 # Use os.read() for truly non-blocking reads.
@@ -314,7 +314,7 @@ def cleanup_process(process: subprocess.Popen | None) -> None:
             process.kill()
         process.wait(timeout=KILL_WAIT_TIMEOUT)
     except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-        pass
+        logger.debug("Failed to forcefully terminate subprocess during cleanup", exc_info=True)
 
 
 def terminate_process_gracefully(process: subprocess.Popen | None) -> None:
@@ -347,7 +347,7 @@ def terminate_process_gracefully(process: subprocess.Popen | None) -> None:
             process.kill()
             process.wait(timeout=KILL_WAIT_TIMEOUT)
         except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-            pass  # Best effort
+            logger.debug("Failed to kill subprocess after graceful shutdown timeout", exc_info=True)
 
 
 def save_scan_log(

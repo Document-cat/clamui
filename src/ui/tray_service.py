@@ -65,7 +65,8 @@ except (ValueError, ImportError) as e:
     logger.info(f"libdbusmenu not available, menu will not be shown: {e}")
 
 if not DBUS_AVAILABLE:
-    print(json.dumps({"event": "error", "message": "GIO D-Bus not available"}), flush=True)
+    sys.stdout.write(json.dumps({"event": "error", "message": "GIO D-Bus not available"}) + "\n")
+    sys.stdout.flush()
     sys.exit(1)
 
 # Initialize i18n for this subprocess

@@ -218,15 +218,21 @@ def create_loading_row(message: str, margin_vertical: int = 24) -> Gtk.ListBoxRo
 class SpinnerWidget(Protocol):
     """Protocol for widgets that support spinner operations."""
 
-    def set_visible(self, visible: bool) -> None: ...
-    def start(self) -> None: ...
-    def stop(self) -> None: ...
+    def set_visible(self, visible: bool) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
 
 
 class SensitiveWidget(Protocol):
     """Protocol for widgets that can be enabled/disabled."""
 
-    def set_sensitive(self, sensitive: bool) -> None: ...
+    def set_sensitive(self, sensitive: bool) -> None:
+        pass
 
 
 @dataclass

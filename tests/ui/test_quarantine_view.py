@@ -1024,7 +1024,7 @@ class TestQuarantineViewSharedQuarantineManager:
 
     def test_quarantine_view_uses_provided_manager(self, quarantine_view_class):
         """When quarantine_manager is passed, QuarantineView should use it."""
-        import src.ui.quarantine_view as qv_module
+        qv_module = sys.modules["src.ui.quarantine_view"]
 
         original_qm = getattr(qv_module, "QuarantineManager", mock.MagicMock)
         mock_qm_class = mock.MagicMock()
@@ -1042,7 +1042,7 @@ class TestQuarantineViewSharedQuarantineManager:
 
     def test_quarantine_view_creates_own_manager_when_not_provided(self, quarantine_view_class):
         """When quarantine_manager is not passed, QuarantineView creates its own."""
-        import src.ui.quarantine_view as qv_module
+        qv_module = sys.modules["src.ui.quarantine_view"]
 
         mock_qm_instance = mock.MagicMock(name="auto_created_qm")
         mock_qm_class = mock.MagicMock(return_value=mock_qm_instance)

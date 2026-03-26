@@ -430,7 +430,8 @@ class ClamUIApp(Adw.Application):
         """Handle command line arguments."""
         from .main import parse_arguments
 
-        file_paths, use_virustotal, _unknown = parse_arguments(command_line.get_arguments())
+        parsed_args = parse_arguments(command_line.get_arguments())
+        file_paths, use_virustotal = parsed_args[:2]
 
         self._initial_scan_paths = file_paths
         self._initial_use_virustotal = use_virustotal

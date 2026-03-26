@@ -287,7 +287,11 @@ class DaemonScanner:
                 try:
                     os.unlink(file_list_path)
                 except OSError:
-                    pass
+                    logger.debug(
+                        "Failed to remove temporary clamd file list %s",
+                        file_list_path,
+                        exc_info=True,
+                    )
 
     def scan_async(
         self,
@@ -645,7 +649,7 @@ class DaemonScanner:
                             file_paths.append(fp)
         except (PermissionError, OSError):
             # If we can't access the directory, return 0 counts
-            pass
+            logger.debug("Failed to count files in scan target %s", path, exc_info=True)
 
         # Count the root directory itself
         if dir_count > 0 or file_count > 0:

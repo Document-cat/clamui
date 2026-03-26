@@ -404,7 +404,7 @@ def open_paths_dialog(
                     file = dlg.open_finish(result)
                     _emit_paths([file.get_path()] if file and file.get_path() else [])
             except GLib.Error:
-                pass
+                return
 
         if select_folders and multiple:
             dialog.select_multiple_folders(parent, None, _on_finish)
@@ -479,7 +479,7 @@ def save_path_dialog(
                 if path:
                     on_selected(path)
             except GLib.Error:
-                pass
+                return
 
         dialog.save(parent, None, _on_finish)
         return dialog

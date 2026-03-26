@@ -6,12 +6,15 @@ Stores scan profiles in JSON format with thread-safe access and atomic writes.
 
 import contextlib
 import json
+import logging
 import os
 import tempfile
 import threading
 from pathlib import Path
 
 from .models import ScanProfile
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileStorage:
@@ -142,7 +145,7 @@ class ProfileStorage:
                     self._storage_path.rename(backup_path)
         except (OSError, PermissionError):
             # Silently fail - backup is best effort
-            pass
+            logger.debug("Failed to backup corrupted profile storage file", exc_info=True)
 
     def get_profile_by_id(self, profile_id: str) -> ScanProfile | None:
         """

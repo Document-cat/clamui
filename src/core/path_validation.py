@@ -246,7 +246,7 @@ def format_scan_path(path: str) -> str:
             if resolved.is_relative_to(home):
                 return "~/" + str(resolved.relative_to(home))
         except (ValueError, RuntimeError):
-            pass
+            return str(resolved)
 
         return str(resolved)
     except (OSError, RuntimeError):

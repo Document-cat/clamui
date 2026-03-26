@@ -259,7 +259,7 @@ class DeviceScanPage(PreferencesPageMixin):
             return
 
         active_types = [
-            type_key for type_key, (row, _handler_id) in self._type_rows.items() if row.get_active()
+            type_key for type_key, (row, _) in self._type_rows.items() if row.get_active()
         ]
         self._settings_manager.set("device_auto_scan_types", active_types)
 

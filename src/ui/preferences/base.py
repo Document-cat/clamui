@@ -567,7 +567,7 @@ class PreferencesPageMixin:
         try:
             dialog.set_transient_for(parent)
         except TypeError:
-            pass  # self is not a Gtk.Window and _parent_window is not set
+            logger.debug("No valid transient parent available for dialog", exc_info=True)
 
         # Create content
         toolbar_view = create_toolbar_view()

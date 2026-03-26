@@ -323,7 +323,7 @@ class UpdateView(Gtk.Box):
             try:
                 GLib.idle_add(self._apply_freshclam_status, result)
             except Exception:
-                pass  # Widget may be destroyed; nothing to do
+                return  # Widget may be destroyed; nothing to do
 
     def _apply_freshclam_status(self, result):
         """

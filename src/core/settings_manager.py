@@ -6,11 +6,14 @@ Stores user settings in JSON format following XDG conventions.
 
 import contextlib
 import json
+import logging
 import os
 import tempfile
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsManager:
@@ -109,7 +112,7 @@ class SettingsManager:
                 self._backup_corrupted_file()
             except (OSError, PermissionError):
                 # Handle permission issues silently
-                pass
+                logger.debug("Failed to load settings file %s", self._settings_file, exc_info=True)
             return dict(self.DEFAULT_SETTINGS)
 
     def save(self) -> bool:
@@ -185,7 +188,7 @@ class SettingsManager:
                     self._settings_file.rename(backup_path)
         except (OSError, PermissionError):
             # Silently fail - backup is best effort
-            pass
+            logger.debug("Failed to backup corrupted settings file", exc_info=True)
 
     def get(self, key: str, default: Any = None) -> Any:
         """

@@ -1993,7 +1993,7 @@ class LogManager:
             except subprocess.TimeoutExpired:
                 return (False, "Timeout reading log file")
             except FileNotFoundError:
-                pass  # Fall through to journalctl
+                logger.debug("tail command not available, falling back to journalctl")
             except OSError as e:
                 logger.debug("OSError reading daemon log via tail: %s", e)
 

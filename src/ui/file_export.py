@@ -31,6 +31,8 @@ from ..core.i18n import _
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["CSV_FILTER", "JSON_FILTER", "TEXT_FILTER", "FileExportHelper", "FileFilter"]
+
 # Check GTK version for FileDialog support (added in GTK 4.10)
 # Handle edge cases where version detection fails (e.g., during testing with mocks)
 try:
@@ -174,7 +176,7 @@ class FileExportHelper:
             self._write_to_file(file.get_path())
         except GLib.Error:
             # User cancelled the dialog
-            pass
+            return
 
     def _show_file_chooser_native(
         self, window: Gtk.Window | None, gtk_filter: Gtk.FileFilter, default_name: str
@@ -276,3 +278,4 @@ class FileExportHelper:
 TEXT_FILTER = FileFilter(name=_("Text Files"), extension="txt", mime_type="text/plain")
 CSV_FILTER = FileFilter(name=_("CSV Files"), extension="csv", mime_type="text/csv")
 JSON_FILTER = FileFilter(name=_("JSON Files"), extension="json", mime_type="application/json")
+_PREDEFINED_FILTERS = (TEXT_FILTER, CSV_FILTER, JSON_FILTER)

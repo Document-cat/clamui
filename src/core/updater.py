@@ -512,7 +512,7 @@ class FreshclamUpdater:
                 process.kill()
             process.wait(timeout=_KILL_WAIT_TIMEOUT)
         except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-            pass
+            logger.debug("Failed to forcefully terminate update process", exc_info=True)
 
     def _run_update_process(self, cmd: list[str]) -> tuple[str, str, int, bool]:
         """Execute the freshclam subprocess and return its output and timeout state."""
@@ -715,7 +715,9 @@ class FreshclamUpdater:
                 process.kill()
                 process.wait(timeout=_KILL_WAIT_TIMEOUT)
             except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-                pass  # Best effort
+                logger.debug(
+                    "Failed to kill update process after graceful shutdown timeout", exc_info=True
+                )
 
     def _build_command(self, force: bool = False) -> list[str]:
         """

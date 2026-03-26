@@ -354,7 +354,7 @@ class DebugPage(PreferencesPageMixin):
             if result.returncode == 0:
                 return "Debian/Ubuntu Package"
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
+            logger.debug("dpkg package ownership check unavailable", exc_info=True)
 
         # Check for RPM package
         try:
@@ -367,7 +367,7 @@ class DebugPage(PreferencesPageMixin):
             if result.returncode == 0:
                 return "RPM Package"
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
+            logger.debug("rpm package ownership check unavailable", exc_info=True)
 
         return "Native (pip/system)"
 
@@ -427,7 +427,7 @@ class DebugPage(PreferencesPageMixin):
                 return name
 
         except (OSError, PermissionError):
-            pass
+            logger.debug("Failed to read /etc/os-release for distro detection", exc_info=True)
 
         # Fallback to platform module
         return platform.platform()

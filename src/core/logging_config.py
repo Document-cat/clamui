@@ -419,7 +419,7 @@ class LoggingConfig:
             try:
                 total += log_file.stat().st_size
             except (OSError, FileNotFoundError):
-                pass
+                continue
         return total
 
     def clear_logs(self) -> bool:

@@ -554,9 +554,9 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
 
     def _get_page_label(self, page_id: str) -> str:
         """Get the display label for a page ID."""
-        for pid, _icon, label in NAVIGATION_ITEMS:
-            if pid == page_id:
-                return _(label)
+        for item in NAVIGATION_ITEMS:
+            if item[0] == page_id:
+                return _(item[2])
         return page_id.capitalize()
 
     def _on_leaflet_folded_changed(self, leaflet, pspec):

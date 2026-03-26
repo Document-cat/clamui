@@ -126,7 +126,7 @@ class QuarantineDatabase:
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
         except (OSError, PermissionError):
             # Handle silently - will fail on database operations
-            pass
+            logger.debug("Failed to create quarantine database directory", exc_info=True)
 
     @contextmanager
     def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
@@ -220,7 +220,7 @@ class QuarantineDatabase:
                 except (OSError, PermissionError):
                     # Silently handle permission errors to avoid breaking database functionality
                     # on systems with restrictive security policies or immutable files
-                    pass
+                    logger.debug("Failed to enforce permissions on %s", db_file, exc_info=True)
 
     def _init_database(self) -> None:
         """Initialize the database schema if it doesn't exist."""

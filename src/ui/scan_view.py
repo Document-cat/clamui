@@ -7,6 +7,7 @@ import logging
 import os
 import tempfile
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -577,9 +578,10 @@ class ScanView(Gtk.Box):
 
         # Clear and rebuild the string list
         # GTK4 StringList doesn't have a clear method, so rebuild
-        n_items = self._profile_string_list.get_n_items()
-        for _i in range(n_items):
+        remaining_items = self._profile_string_list.get_n_items()
+        while remaining_items > 0:
             self._profile_string_list.remove(0)
+            remaining_items -= 1
 
         # Add "No Profile" option
         self._profile_string_list.append(_("No Profile (Manual)"))
@@ -1116,7 +1118,6 @@ class ScanView(Gtk.Box):
             return True  # Continue pulsing
 
         self._pulse_timeout_id = GLib.timeout_add(100, pulse_callback)
-        return None
 
     def _stop_progress_pulse(self):
         """Stop the progress bar pulsing animation and hide progress section."""
@@ -1988,10 +1989,8 @@ class ScanView(Gtk.Box):
         """
         # Clean up temp EICAR file if it exists
         if self._eicar_temp_path and os.path.exists(self._eicar_temp_path):
-            try:
+            with suppress(OSError):
                 os.remove(self._eicar_temp_path)
-            except OSError:
-                pass
             self._eicar_temp_path = ""
         self._scan_backend_override = None
 

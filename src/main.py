@@ -162,8 +162,7 @@ def parse_file_arguments(argv: list[str]) -> list[str]:
     Returns:
         List of file/folder paths to scan. Empty list if no paths provided.
     """
-    file_paths, _vt, _unknown = parse_arguments(argv)
-    return file_paths
+    return parse_arguments(argv)[0]
 
 
 def main():

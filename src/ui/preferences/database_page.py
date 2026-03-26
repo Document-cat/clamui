@@ -316,7 +316,7 @@ class DatabasePage(PreferencesPageMixin):
                     if gfile:
                         _apply_selection(gfile.get_path())
                 except GLib.Error:
-                    pass  # User cancelled
+                    return  # User cancelled
 
             dialog.open(parent_window, None, _on_open_finish)
         else:
