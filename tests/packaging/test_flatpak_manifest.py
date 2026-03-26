@@ -142,6 +142,8 @@ class TestRequiredPermissions:
         # Should have some D-Bus permissions for tray
         assert len(talk_args) > 0, "Missing D-Bus talk permissions"
 
+    # Verify both the release manifest and the local development manifest rely
+    # on Flatpak's accessibility bus proxy instead of requesting org.a11y.Bus.
     @pytest.mark.parametrize(
         "manifest_name",
         [

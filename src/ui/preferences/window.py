@@ -241,6 +241,9 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
             "debug": self._create_debug_page,
             "save": self._create_save_page,
         }
+        # Behavior is created eagerly as the default visible page. The rest are
+        # instantiated on first navigation via _page_factories to keep startup
+        # costs down.
         self._created_pages: set[str] = set()
 
         # Set up the UI

@@ -92,6 +92,7 @@ def test_do_tray_profile_select_returns_false_without_scan_view():
     """Tray profile selection should no-op cleanly when scan view is unavailable."""
     app = _make_app(mock.MagicMock())
     app._scan_view = None
+    app.scan_view = mock.MagicMock()
     app._view_coordinator = mock.MagicMock()
 
     integration = TrayIntegration(app)

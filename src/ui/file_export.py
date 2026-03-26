@@ -16,6 +16,7 @@ Supports GTK 4.6+ with automatic fallback:
 - GTK 4.6-4.9: Falls back to Gtk.FileChooserNative
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,13 +29,20 @@ from gi.repository import Adw, Gio, GLib, Gtk
 
 from ..core.i18n import _
 
+logger = logging.getLogger(__name__)
+
 # Check GTK version for FileDialog support (added in GTK 4.10)
 # Handle edge cases where version detection fails (e.g., during testing with mocks)
 try:
     _GTK_MINOR_VERSION = Gtk.get_minor_version()
     _HAS_FILE_DIALOG = _GTK_MINOR_VERSION >= 10
-except (TypeError, AttributeError):
+except (TypeError, AttributeError) as exc:
     # Fallback to older API if version detection fails
+    logger.debug(
+        "Failed to determine GTK minor version for FileDialog support; "
+        "falling back to FileChooserNative. Error: %s",
+        exc,
+    )
     _HAS_FILE_DIALOG = False
 
 

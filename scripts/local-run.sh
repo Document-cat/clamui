@@ -147,4 +147,6 @@ echo "Syncing Python dependencies..."
 install_python_dependencies
 
 echo "Starting ClamUI..."
+# Use --no-sync because install_python_dependencies already prepared the
+# environment above.
 uv run --no-sync clamui "${APP_ARGS[@]}"
