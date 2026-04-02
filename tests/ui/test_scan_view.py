@@ -1904,7 +1904,6 @@ class TestEicarTest:
             call_kwargs = mock_tempfile.NamedTemporaryFile.call_args[1]
             assert call_kwargs["delete"] is False
             assert ".txt" in call_kwargs["suffix"]
-            assert mock_scan_view._scan_backend_override == "clamscan"
 
     def test_eicar_test_uses_cache_dir_in_flatpak(self, mock_scan_view, tmp_path):
         """Test that EICAR test uses ~/.cache/clamui directory in Flatpak.
@@ -1976,16 +1975,14 @@ class TestBackendIndicator:
         label = mock_scan_view._backend_label.set_label.call_args[0][0]
         assert "clamscan" in label.lower()
 
-    def test_update_backend_label_daemon_sets_eicar_clamscan_note(self, mock_scan_view):
-        """Test daemon backend tooltip explains the clamscan EICAR workaround."""
+    def test_update_backend_label_daemon_sets_eicar_tooltip(self, mock_scan_view):
+        """Test daemon backend tooltip describes EICAR self-test."""
         mock_scan_view._scanner.get_active_backend.return_value = "daemon"
 
         mock_scan_view._update_backend_label()
 
         tooltip = mock_scan_view._eicar_button.set_tooltip_text.call_args[0][0]
         assert "eicar test file" in tooltip.lower()
-        assert "clamscan" in tooltip.lower()
-        assert "daemon backend" in tooltip.lower()
 
     def test_update_backend_label_clamscan_sets_base_eicar_tooltip(self, mock_scan_view):
         """Test clamscan backend keeps the base EICAR tooltip text."""

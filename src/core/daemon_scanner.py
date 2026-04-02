@@ -358,11 +358,20 @@ class DaemonScanner:
         """
         Build the clamdscan command arguments.
 
-        Uses --multiscan for parallel scanning and --fdpass for
-        file descriptor passing when not in verbose mode. In verbose mode,
-        uses --file-list to feed individual files so clamdscan emits per-file
-        results on stdout (scanning a directory only produces one summary line).
-        Also prepends stdbuf -oL to force line-buffered stdout.
+        Uses the INSTREAM protocol: clamdscan reads files and streams their
+        content to clamd over the socket. In verbose mode, prepends
+        stdbuf -oL and uses --file-list so clamdscan emits per-file results
+        on stdout (scanning a directory only produces one summary line).
+
+        We intentionally do NOT use --fdpass / --multiscan. Those flags
+        switch clamd to the FILDES protocol where it reads files server-side
+        via passed file descriptors. While faster for bulk I/O, FILDES
+        silently fails to detect the EICAR test signature — clamd reports
+        the file as clean (exit 0) regardless of its location. This makes
+        it impossible for users to verify that daemon scanning works.
+        The INSTREAM protocol detects EICAR reliably, and the daemon's main
+        performance advantage (in-memory virus database, no 3-10s load time)
+        is preserved.
 
         Args:
             path: Path to scan (used as target when file_list_path is None)
@@ -387,14 +396,6 @@ class DaemonScanner:
             cmd = ["stdbuf", "-oL", "clamdscan"]
         else:
             cmd = ["clamdscan"]
-
-        # --multiscan and --fdpass are fast but suppress per-file stdout output:
-        # they cause clamd to process files server-side in parallel, returning
-        # results in bulk at the end. In verbose mode (progress tracking), we
-        # need per-file output so we use the sequential SCAN protocol instead.
-        if not verbose:
-            cmd.append("--multiscan")
-            cmd.append("--fdpass")
 
         if verbose:
             cmd.append("-v")

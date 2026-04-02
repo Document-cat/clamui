@@ -98,8 +98,9 @@ class TestDaemonScannerBuildCommand:
 
         # Now uses binary name directly (not full path from which_host_command)
         assert cmd[0] == "clamdscan"
-        assert "--multiscan" in cmd
-        assert "--fdpass" in cmd
+        # --fdpass/--multiscan removed: INSTREAM protocol detects EICAR reliably
+        assert "--fdpass" not in cmd
+        assert "--multiscan" not in cmd
         assert "-i" in cmd
         assert str(test_file) in cmd
 
@@ -1485,12 +1486,12 @@ class TestDaemonScannerExclusionHelpers:
 class TestDaemonScannerFlatpakSupport:
     """Tests for DaemonScanner Flatpak mode support."""
 
-    def test_build_command_uses_optimal_flags_in_flatpak(self, tmp_path, daemon_scanner_class):
-        """Test _build_command uses --multiscan --fdpass in Flatpak mode.
+    def test_build_command_uses_instream_in_flatpak(self, tmp_path, daemon_scanner_class):
+        """Test _build_command uses INSTREAM protocol (no --fdpass) in Flatpak mode.
 
-        Previously, Flatpak mode used --stream which is slower.
-        Now that clamdscan runs on the host via flatpak-spawn --host,
-        it can use the optimal --multiscan --fdpass flags.
+        clamdscan runs on the host via flatpak-spawn --host. We use the
+        INSTREAM protocol (no --fdpass/--multiscan) because the FILDES
+        protocol silently fails to detect the EICAR test signature.
         """
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
@@ -1511,13 +1512,13 @@ class TestDaemonScannerFlatpakSupport:
         # Now uses binary name only, not full path
         assert cmd[2] == "clamdscan"
 
-        # Verify optimal flags are used (not --stream)
-        assert "--multiscan" in cmd
-        assert "--fdpass" in cmd
+        # Verify INSTREAM protocol (no --fdpass/--multiscan/--stream)
+        assert "--fdpass" not in cmd
+        assert "--multiscan" not in cmd
         assert "--stream" not in cmd
 
-    def test_build_command_uses_optimal_flags_in_native(self, tmp_path, daemon_scanner_class):
-        """Test _build_command uses --multiscan --fdpass in native mode."""
+    def test_build_command_uses_instream_in_native(self, tmp_path, daemon_scanner_class):
+        """Test _build_command uses INSTREAM protocol (no --fdpass) in native mode."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
@@ -1533,8 +1534,8 @@ class TestDaemonScannerFlatpakSupport:
 
         # Now uses binary name only
         assert cmd[0] == "clamdscan"
-        assert "--multiscan" in cmd
-        assert "--fdpass" in cmd
+        assert "--fdpass" not in cmd
+        assert "--multiscan" not in cmd
         assert "--stream" not in cmd
 
     def test_build_command_wraps_with_flatpak_spawn(self, tmp_path, daemon_scanner_class):

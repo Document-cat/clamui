@@ -1572,9 +1572,6 @@ class ScanView(Gtk.Box):
 
             # Set the EICAR file as scan target and start scan
             self._set_selected_path(self._eicar_temp_path)
-            # Work around host clamd false-clean EICAR results by forcing
-            # the self-test through clamscan without changing saved settings.
-            self._scan_backend_override = "clamscan"
             # The EICAR test path will be shown in the listbox via _set_selected_path
             self._start_scanning()
 
@@ -2034,13 +2031,7 @@ class ScanView(Gtk.Box):
 
     def _get_eicar_tooltip_text(self, backend: str) -> str:
         """Get EICAR button tooltip text for the active backend."""
-        base_tooltip = _("Run a scan with EICAR test file to verify antivirus detection")
-        if backend == "daemon":
-            daemon_note = _(
-                "Note: ClamUI uses clamscan for the EICAR self-test when the daemon backend is active."
-            )
-            return f"{base_tooltip}\n\n{daemon_note}"
-        return base_tooltip
+        return _("Run a scan with EICAR test file to verify antivirus detection")
 
     def _update_eicar_tooltip(self, backend: str | None = None) -> None:
         """Update EICAR tooltip text for current backend."""
