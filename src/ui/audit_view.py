@@ -466,8 +466,13 @@ class AuditView(Gtk.Box):
         suffix_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         suffix_box.set_valign(Gtk.Align.CENTER)
 
-        # Info link button (if URL provided)
-        if check.info_url:
+        # Info link button — skip for UNKNOWN/SKIPPED to avoid duplicate ⓘ icons
+        # (those statuses already use help-about-symbolic as their status icon)
+        show_info = check.info_url and check.status not in (
+            AuditStatus.UNKNOWN,
+            AuditStatus.SKIPPED,
+        )
+        if show_info:
             info_button = Gtk.Button()
             info_button.set_icon_name(resolve_icon_name("help-about-symbolic"))
             info_button.set_tooltip_text(_("Learn more"))
@@ -478,7 +483,16 @@ class AuditView(Gtk.Box):
 
         # Status icon — use Gio.ThemedIcon for cross-theme fallbacks
         status_icon = self._create_status_image(check.status)
-        suffix_box.append(status_icon)
+        # If we skipped the info button but have a URL, make the status icon clickable
+        if check.info_url and not show_info:
+            status_button = Gtk.Button()
+            status_button.set_child(status_icon)
+            status_button.add_css_class("flat")
+            status_button.set_tooltip_text(_("Learn more"))
+            status_button.connect("clicked", self._on_info_clicked, check.info_url)
+            suffix_box.append(status_button)
+        else:
+            suffix_box.append(status_icon)
 
         safe_add_suffix(row, suffix_box)
 
