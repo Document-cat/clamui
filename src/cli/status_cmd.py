@@ -45,7 +45,7 @@ def _collect_clamav_info(scanner: Scanner, log_manager: LogManager) -> dict:
     """
     is_available, version_or_error = scanner.check_available()
     backend = scanner.get_active_backend()
-    daemon_status, _daemon_msg = log_manager.get_daemon_status()
+    daemon_status, _ = log_manager.get_daemon_status()
 
     return {
         "available": is_available,

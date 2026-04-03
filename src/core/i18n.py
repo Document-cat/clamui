@@ -21,6 +21,8 @@ import os
 
 DOMAIN = "clamui"
 
+__all__ = ["DOMAIN", "N_", "_", "ngettext", "pgettext"]
+
 
 def _get_locale_dir() -> str | None:
     """
@@ -79,6 +81,7 @@ _init_gettext()
 _ = gettext.gettext
 ngettext = gettext.ngettext
 pgettext = gettext.pgettext
+_TRANSLATION_FUNCTIONS = (_, ngettext, pgettext)
 
 # N_ marks strings for extraction by xgettext but returns them unchanged.
 # The actual translation happens when _() is called at display time.

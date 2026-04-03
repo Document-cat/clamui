@@ -6,12 +6,9 @@ This module provides the DatabasePage class which handles the UI and logic
 for configuring ClamAV database update settings (freshclam.conf).
 """
 
-import logging
 from urllib.parse import urlparse
 
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -319,7 +316,7 @@ class DatabasePage(PreferencesPageMixin):
                     if gfile:
                         _apply_selection(gfile.get_path())
                 except GLib.Error:
-                    pass  # User cancelled
+                    return  # User cancelled
 
             dialog.open(parent_window, None, _on_open_finish)
         else:

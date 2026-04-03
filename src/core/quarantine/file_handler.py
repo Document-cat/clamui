@@ -11,6 +11,7 @@ Provides secure file movement to/from quarantine with:
 
 import contextlib
 import hashlib
+import logging
 import os
 import shutil
 import threading
@@ -18,6 +19,8 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class FileOperationStatus(Enum):
@@ -361,7 +364,7 @@ class SecureFileHandler:
                 )
             except ValueError:
                 # Path is not relative to this protected directory, continue checking
-                pass
+                continue
 
         # Check each component of the path for symlinks that might escape
         # to protected directories
@@ -385,7 +388,7 @@ class SecureFileHandler:
                             )
                         except ValueError:
                             # Not in this protected directory, continue
-                            pass
+                            continue
 
                 except (OSError, RuntimeError) as e:
                     return (False, f"Error resolving symlink in path: {e}")
@@ -865,10 +868,10 @@ class SecureFileHandler:
                             "modified": stat_info.st_mtime,
                         }
                     )
-        except PermissionError:
-            pass
-        except OSError:
-            pass
+        except PermissionError as e:
+            logger.warning("Permission denied accessing quarantine file: %s", e)
+        except OSError as e:
+            logger.debug("Failed to stat quarantine file: %s", e)
 
         return files
 

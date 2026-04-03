@@ -74,9 +74,9 @@ def create_entry_row(icon_name: str | None = None) -> Adw.ActionRow:
     row._compat_entry = entry
 
     # Patch methods
-    row.set_text = lambda text: entry.set_text(text)
-    row.get_text = lambda: entry.get_text()
-    row.set_input_purpose = lambda purpose: entry.set_input_purpose(purpose)
+    row.set_text = entry.set_text
+    row.get_text = entry.get_text
+    row.set_input_purpose = entry.set_input_purpose
     row.set_show_apply_button = lambda val: None  # No-op, not available in 1.0
     row.get_delegate = lambda: entry
 
@@ -130,8 +130,8 @@ def create_switch_row(icon_name: str | None = None) -> Adw.ActionRow:
     row._compat_switch = switch
 
     # Patch methods
-    row.set_active = lambda val: switch.set_active(val)
-    row.get_active = lambda: switch.get_active()
+    row.set_active = switch.set_active
+    row.get_active = switch.get_active
 
     # Patch connect to redirect switch-specific signals
     _original_connect = row.connect
@@ -235,7 +235,7 @@ def create_banner() -> Gtk.Revealer:
     revealer._compat_button = button
 
     # Patch methods
-    revealer.set_title = lambda text: label.set_text(text)
+    revealer.set_title = label.set_text
 
     def _set_revealed(val):
         revealer.set_reveal_child(val)
@@ -404,7 +404,7 @@ def open_paths_dialog(
                     file = dlg.open_finish(result)
                     _emit_paths([file.get_path()] if file and file.get_path() else [])
             except GLib.Error:
-                pass
+                return
 
         if select_folders and multiple:
             dialog.select_multiple_folders(parent, None, _on_finish)
@@ -479,7 +479,7 @@ def save_path_dialog(
                 if path:
                     on_selected(path)
             except GLib.Error:
-                pass
+                return
 
         dialog.save(parent, None, _on_finish)
         return dialog

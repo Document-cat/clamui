@@ -218,6 +218,10 @@ def sanitize_log_line(text: str | None) -> str:
     result = []
     for char in sanitized:
         code = ord(char)
+        # Strip surrogate code points (U+D800-U+DFFF) that arise from
+        # reading non-UTF-8 filenames with surrogateescape error handling
+        if 0xD800 <= code <= 0xDFFF:
+            continue
         # Keep printable characters (>= 0x20) and tab (0x09)
         # Skip all other control characters (0x00-0x1F except 0x09) and DEL (0x7F)
         if code >= 0x20 or code == 0x09:
@@ -273,6 +277,10 @@ def sanitize_log_text(text: str | None) -> str:
     result = []
     for char in sanitized:
         code = ord(char)
+        # Strip surrogate code points (U+D800-U+DFFF) that arise from
+        # reading non-UTF-8 filenames with surrogateescape error handling
+        if 0xD800 <= code <= 0xDFFF:
+            continue
         # Keep printable characters (>= 0x20) and safe whitespace
         if code >= 0x20:
             if code != 0x7F:  # Skip DEL character

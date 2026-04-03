@@ -6,11 +6,14 @@ Stores user settings in JSON format following XDG conventions.
 
 import contextlib
 import json
+import logging
 import os
 import tempfile
 import threading
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsManager:
@@ -44,6 +47,7 @@ class SettingsManager:
         "daemon_socket_path": "",  # Empty = auto-detect
         "clamd_conf_path": "",  # Empty = auto-detect
         "freshclam_conf_path": "",  # Empty = auto-detect
+        "clamd_size_limit_unit_migration_done": False,
         # VirusTotal settings
         "virustotal_api_key": None,  # Fallback storage if keyring unavailable
         "virustotal_remember_no_key_action": "none",  # "none", "open_website", "prompt"
@@ -109,7 +113,7 @@ class SettingsManager:
                 self._backup_corrupted_file()
             except (OSError, PermissionError):
                 # Handle permission issues silently
-                pass
+                logger.debug("Failed to load settings file %s", self._settings_file, exc_info=True)
             return dict(self.DEFAULT_SETTINGS)
 
     def save(self) -> bool:
@@ -185,7 +189,7 @@ class SettingsManager:
                     self._settings_file.rename(backup_path)
         except (OSError, PermissionError):
             # Silently fail - backup is best effort
-            pass
+            logger.debug("Failed to backup corrupted settings file", exc_info=True)
 
     def get(self, key: str, default: Any = None) -> Any:
         """

@@ -20,10 +20,6 @@ from .pagination import PaginatedListController
 from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import EmptyStateConfig, create_empty_state, create_loading_row
 
-# Backward compatibility constants for tests
-INITIAL_LOG_DISPLAY_LIMIT = PaginatedListController.DEFAULT_INITIAL_LIMIT
-LOAD_MORE_LOG_BATCH_SIZE = PaginatedListController.DEFAULT_BATCH_SIZE
-
 
 class ClearLogsDialog(Adw.Window):
     """
@@ -1121,7 +1117,7 @@ class LogsView(Gtk.Box):
             dialog_title="Export All Logs to CSV",
             filename_prefix="clamui_logs",
             file_filter=CSV_FILTER,
-            content_generator=lambda: self._format_all_logs_as_csv(),
+            content_generator=self._format_all_logs_as_csv,
             success_message=f"Exported {count} logs",
         )
         helper.show_save_dialog()
@@ -1142,7 +1138,7 @@ class LogsView(Gtk.Box):
             dialog_title="Export All Logs to JSON",
             filename_prefix="clamui_logs",
             file_filter=JSON_FILTER,
-            content_generator=lambda: self._format_all_logs_as_json(),
+            content_generator=self._format_all_logs_as_json,
             success_message=f"Exported {count} logs",
         )
         helper.show_save_dialog()

@@ -349,12 +349,10 @@ class TestBehaviorPageFileManagerIntegration:
         adw.PreferencesPage.return_value = mock_page
         adw.PreferencesGroup.return_value = mock_group
 
-        # Mock is_flatpak to return True
-        import src.ui.preferences.behavior_page as behavior_module
-
-        monkeypatch.setattr(behavior_module, "is_flatpak", lambda: True)
-
         from src.ui.preferences.behavior_page import BehaviorPage
+
+        behavior_module = sys.modules["src.ui.preferences.behavior_page"]
+        monkeypatch.setattr(behavior_module, "is_flatpak", lambda: True)
 
         page_instance = BehaviorPage(tray_available=True)
         page_instance.create_page()
@@ -371,12 +369,10 @@ class TestBehaviorPageFileManagerIntegration:
         adw.PreferencesPage.return_value = mock_page
         adw.PreferencesGroup.return_value = mock_group
 
-        # Mock is_flatpak to return False
-        import src.ui.preferences.behavior_page as behavior_module
-
-        monkeypatch.setattr(behavior_module, "is_flatpak", lambda: False)
-
         from src.ui.preferences.behavior_page import BehaviorPage
+
+        behavior_module = sys.modules["src.ui.preferences.behavior_page"]
+        monkeypatch.setattr(behavior_module, "is_flatpak", lambda: False)
 
         page_instance = BehaviorPage(tray_available=True)
         page_instance.create_page()

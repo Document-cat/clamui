@@ -422,8 +422,8 @@ class VirusTotalClient:
             if scan_timestamp:
                 try:
                     scan_date = datetime.fromtimestamp(scan_timestamp).isoformat()
-                except (ValueError, OSError):
-                    pass
+                except (ValueError, OSError) as e:
+                    logger.debug("Invalid scan timestamp in VT response: %s", e)
 
             # Build permalink
             permalink = f"https://www.virustotal.com/gui/file/{sha256}"
@@ -596,8 +596,8 @@ class VirusTotalClient:
                         time.sleep(poll_interval)
                         continue
 
-                except (KeyError, TypeError, ValueError):
-                    pass
+                except (KeyError, TypeError, ValueError) as e:
+                    logger.debug("Unexpected VT poll response structure: %s", e)
 
             time.sleep(poll_interval)
 

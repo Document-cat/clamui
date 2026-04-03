@@ -6,12 +6,9 @@ This module provides the ScheduledPage class which handles the UI and logic
 for configuring scheduled scans using systemd timers or cron.
 """
 
-import logging
 from pathlib import Path
 
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")

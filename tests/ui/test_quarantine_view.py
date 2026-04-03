@@ -157,10 +157,10 @@ class TestQuarantineViewImport:
                 "src.core.quarantine": mock.MagicMock(),
             },
         ):
-            from src.ui.quarantine_view import INITIAL_DISPLAY_LIMIT, LOAD_MORE_BATCH_SIZE
+            from src.ui.pagination import PaginatedListController
 
-            assert INITIAL_DISPLAY_LIMIT == 25
-            assert LOAD_MORE_BATCH_SIZE == 25
+            assert PaginatedListController.DEFAULT_INITIAL_LIMIT == 25
+            assert PaginatedListController.DEFAULT_BATCH_SIZE == 25
 
 
 class TestFormatFileSize:
@@ -979,9 +979,8 @@ def test_quarantine_view_basic(mock_gi_modules):
             "src.core.quarantine": mock.MagicMock(),
         },
     ):
+        from src.ui.pagination import PaginatedListController
         from src.ui.quarantine_view import (
-            INITIAL_DISPLAY_LIMIT,
-            LOAD_MORE_BATCH_SIZE,
             QuarantineView,
             format_file_size,
         )
@@ -990,8 +989,8 @@ def test_quarantine_view_basic(mock_gi_modules):
         assert QuarantineView is not None
 
         # Test 2: Pagination constants are correct
-        assert INITIAL_DISPLAY_LIMIT == 25
-        assert LOAD_MORE_BATCH_SIZE == 25
+        assert PaginatedListController.DEFAULT_INITIAL_LIMIT == 25
+        assert PaginatedListController.DEFAULT_BATCH_SIZE == 25
 
         # Test 3: format_file_size function works
         assert format_file_size(0) == "0 B"
@@ -1025,7 +1024,7 @@ class TestQuarantineViewSharedQuarantineManager:
 
     def test_quarantine_view_uses_provided_manager(self, quarantine_view_class):
         """When quarantine_manager is passed, QuarantineView should use it."""
-        import src.ui.quarantine_view as qv_module
+        qv_module = sys.modules["src.ui.quarantine_view"]
 
         original_qm = getattr(qv_module, "QuarantineManager", mock.MagicMock)
         mock_qm_class = mock.MagicMock()
@@ -1043,7 +1042,7 @@ class TestQuarantineViewSharedQuarantineManager:
 
     def test_quarantine_view_creates_own_manager_when_not_provided(self, quarantine_view_class):
         """When quarantine_manager is not passed, QuarantineView creates its own."""
-        import src.ui.quarantine_view as qv_module
+        qv_module = sys.modules["src.ui.quarantine_view"]
 
         mock_qm_instance = mock.MagicMock(name="auto_created_qm")
         mock_qm_class = mock.MagicMock(return_value=mock_qm_instance)

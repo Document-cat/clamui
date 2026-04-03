@@ -118,6 +118,45 @@ class TestDaemonScannerBuildCommand:
             mock_wrap.assert_called_once()
             assert mock_wrap.call_args[1].get("force_host") is True
 
+    def test_build_command_force_stream_uses_stream_mode(self, tmp_path, daemon_scanner_class):
+        """Test force_stream switches daemon scans to clamdscan --stream."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        scanner = daemon_scanner_class()
+
+        with patch("src.core.daemon_scanner.wrap_host_command", side_effect=lambda x, **kw: x):
+            cmd = scanner._build_command(str(test_file), recursive=True, force_stream=True)
+
+        assert cmd[0] == "clamdscan"
+        assert "--stream" in cmd
+        assert "--multiscan" not in cmd
+        assert "--fdpass" not in cmd
+
+    def test_build_command_verbose_file_list_uses_fdpass(self, tmp_path, daemon_scanner_class):
+        """Verbose file-list scans should keep fdpass for reliable access."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+        file_list = tmp_path / "files.txt"
+        file_list.write_text(str(test_file), encoding="utf-8")
+
+        scanner = daemon_scanner_class()
+
+        with patch("src.core.daemon_scanner.wrap_host_command", side_effect=lambda x, **kw: x):
+            cmd = scanner._build_command(
+                str(test_file),
+                recursive=True,
+                verbose=True,
+                file_list_path=str(file_list),
+            )
+
+        assert cmd[:3] == ["stdbuf", "-oL", "clamdscan"]
+        assert "-v" in cmd
+        assert "--file-list" in cmd
+        assert "--fdpass" in cmd
+        assert "--multiscan" not in cmd
+        assert "--stream" not in cmd
+
     def test_build_command_without_exclusions(self, tmp_path, daemon_scanner_class):
         """Test _build_command does NOT include --exclude (clamdscan doesn't support it)."""
         test_file = tmp_path / "test.txt"
@@ -297,11 +336,14 @@ class TestDaemonScannerProgressParsing:
             return ("\n".join(lines), "", False)
 
         with patch("src.core.daemon_scanner.stream_process_output", side_effect=fake_stream):
-            _, _, _, files_scanned, infected_count, infected_files = scanner._scan_with_progress(
+            scan_result = scanner._scan_with_progress(
                 process=MagicMock(),
                 progress_callback=progress_events.append,
                 files_total=10,
             )
+            files_scanned = scan_result[3]
+            infected_count = scan_result[4]
+            infected_files = scan_result[5]
 
         assert files_scanned == 1
         assert infected_count == 1
@@ -1483,12 +1525,7 @@ class TestDaemonScannerFlatpakSupport:
     """Tests for DaemonScanner Flatpak mode support."""
 
     def test_build_command_uses_optimal_flags_in_flatpak(self, tmp_path, daemon_scanner_class):
-        """Test _build_command uses --multiscan --fdpass in Flatpak mode.
-
-        Previously, Flatpak mode used --stream which is slower.
-        Now that clamdscan runs on the host via flatpak-spawn --host,
-        it can use the optimal --multiscan --fdpass flags.
-        """
+        """Test _build_command uses --multiscan --fdpass in Flatpak mode."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 

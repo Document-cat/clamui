@@ -669,7 +669,7 @@ def run_scheduled_scan(
         return _handle_dry_run(ctx, valid_targets)
 
     # Check ClamAV availability
-    _version, clamav_error = _check_clamav_availability(ctx, valid_targets)
+    clamav_error = _check_clamav_availability(ctx, valid_targets)[1]
     if clamav_error is not None:
         return clamav_error
 

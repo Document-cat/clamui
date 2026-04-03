@@ -6,11 +6,7 @@ This module provides the BehaviorPage class which handles the UI and logic
 for managing window behavior settings like close behavior and tray integration.
 """
 
-import logging
-
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")

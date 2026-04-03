@@ -332,8 +332,8 @@ class FreshclamUpdater:
             if pid_result.returncode == 0 and pid_result.stdout.strip():
                 pid = pid_result.stdout.strip().split()[0]
                 return True, pid
-        except Exception:
-            pass  # Best-effort check; proceed with update if anything goes wrong
+        except Exception as e:
+            logger.debug("Failed to check if freshclam is running: %s", e)
         return False, None
 
     def _create_result(
@@ -512,7 +512,7 @@ class FreshclamUpdater:
                 process.kill()
             process.wait(timeout=_KILL_WAIT_TIMEOUT)
         except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-            pass
+            logger.debug("Failed to forcefully terminate update process", exc_info=True)
 
     def _run_update_process(self, cmd: list[str]) -> tuple[str, str, int, bool]:
         """Execute the freshclam subprocess and return its output and timeout state."""
@@ -715,7 +715,9 @@ class FreshclamUpdater:
                 process.kill()
                 process.wait(timeout=_KILL_WAIT_TIMEOUT)
             except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
-                pass  # Best effort
+                logger.debug(
+                    "Failed to kill update process after graceful shutdown timeout", exc_info=True
+                )
 
     def _build_command(self, force: bool = False) -> list[str]:
         """
@@ -768,12 +770,16 @@ class FreshclamUpdater:
                 if force:
                     # Force update: Delete databases first, then run freshclam
                     # This all happens via pkexec with root privileges
+                    # freshclam is passed as $1 (positional arg) to avoid
+                    # shell injection — the script string is a constant.
                     cmd = [
                         pkexec,
                         "sh",
                         "-c",
                         # Delete all ClamAV database files, then run freshclam
-                        f"rm -f /var/lib/clamav/*.cvd /var/lib/clamav/*.cld /var/lib/clamav/*.cud 2>/dev/null; {freshclam} --verbose",
+                        'rm -f /var/lib/clamav/*.cvd /var/lib/clamav/*.cld /var/lib/clamav/*.cud 2>/dev/null; "$1" --verbose',
+                        "clamui-force-update",  # $0 (script name for error messages)
+                        freshclam,  # $1 (safe — not interpreted as shell syntax)
                     ]
                     return wrap_host_command(cmd)
                 else:

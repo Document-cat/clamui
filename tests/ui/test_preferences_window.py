@@ -106,10 +106,9 @@ class TestPreferencesWindowBackwardCompatibility:
                 "src.core.scanner": mock.MagicMock(),
             },
         ):
-            import src.ui.preferences as preferences_pkg
+            from src.ui.preferences import __all__ as exported_names
 
-            assert hasattr(preferences_pkg, "__all__")
-            assert "PreferencesWindow" in preferences_pkg.__all__
-            assert "PRESET_EXCLUSIONS" in preferences_pkg.__all__
+            assert "PreferencesWindow" in exported_names
+            assert "PRESET_EXCLUSIONS" in exported_names
             # Clean up to prevent test pollution
             _clear_src_modules()

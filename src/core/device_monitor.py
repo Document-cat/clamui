@@ -214,8 +214,8 @@ class DeviceMonitor:
                 info = root.query_filesystem_info(Gio.FILE_ATTRIBUTE_FILESYSTEM_SIZE, None)
                 if info:
                     size_bytes = info.get_attribute_uint64(Gio.FILE_ATTRIBUTE_FILESYSTEM_SIZE)
-            except Exception:
-                pass  # Size unknown - will fail open
+            except Exception as e:
+                logger.debug("Could not query filesystem size for '%s': %s", mount_point, e)
 
         return MountInfo(
             mount_point=mount_point,

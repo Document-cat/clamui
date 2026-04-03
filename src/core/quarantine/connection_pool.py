@@ -12,6 +12,7 @@ Security Considerations:
     other users on multi-user systems.
 """
 
+import logging
 import os
 import queue
 import sqlite3
@@ -19,6 +20,8 @@ import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionPool:
@@ -143,7 +146,9 @@ class ConnectionPool:
                 except (OSError, PermissionError):
                     # Silently handle permission errors to avoid breaking database functionality
                     # on systems with restrictive security policies or immutable files
-                    pass
+                    logger.debug(
+                        "Failed to enforce SQLite permissions on %s", db_file, exc_info=True
+                    )
 
     def acquire(self, timeout: float | None = None) -> sqlite3.Connection:
         """
@@ -171,7 +176,9 @@ class ConnectionPool:
         try:
             return self._pool.get(block=False)
         except queue.Empty:
-            pass  # Pool is empty, continue to next step
+            logger.debug(
+                "SQLite connection pool is empty; attempting to create or wait for a connection"
+            )
 
         # STEP 2: Pool empty - check if we can create new connection
         with self._lock:
@@ -255,7 +262,7 @@ class ConnectionPool:
                 conn.rollback()
             except sqlite3.Error:
                 # Ignore rollback errors - connection may be invalid
-                pass
+                logger.debug("Failed to rollback SQLite transaction", exc_info=True)
             raise
         finally:
             # Always release connection back to pool
@@ -330,7 +337,9 @@ class ConnectionPool:
                         conn.close()
                     except sqlite3.Error:
                         # Ignore errors closing already-closed connections
-                        pass
+                        logger.debug(
+                            "Failed to close SQLite connection during pool shutdown", exc_info=True
+                        )
                     # Decrement total connections count
                     self._total_connections -= 1
                 except queue.Empty:

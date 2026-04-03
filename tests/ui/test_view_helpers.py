@@ -699,7 +699,7 @@ class TestCreateRefreshHeader:
         """Test create_refresh_header with custom tooltip sets it on button."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        _, _, button = create_refresh_header(
+        header_box, spinner, button = create_refresh_header(
             on_refresh_clicked=mock.MagicMock(),
             tooltip="Refresh statistics",
         )
@@ -711,7 +711,7 @@ class TestCreateRefreshHeader:
         """Test spinner is hidden by default."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        _, spinner, _ = create_refresh_header(on_refresh_clicked=mock.MagicMock())
+        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
         # Verify spinner starts hidden
         spinner.set_visible.assert_called_with(False)
@@ -720,7 +720,7 @@ class TestCreateRefreshHeader:
         """Test button has refresh icon set."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        _, _, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
+        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
         # Verify refresh icon was set on the button
         button.set_icon_name.assert_called_once()
@@ -730,7 +730,7 @@ class TestCreateRefreshHeader:
         create_refresh_header = view_helpers_module.create_refresh_header
 
         callback = mock.MagicMock()
-        _, _, button = create_refresh_header(on_refresh_clicked=callback)
+        header_box, spinner, button = create_refresh_header(on_refresh_clicked=callback)
 
         # Verify callback was connected to the "clicked" signal
         button.connect.assert_called_once_with("clicked", callback)

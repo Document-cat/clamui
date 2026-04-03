@@ -331,7 +331,7 @@ def get_xdg_user_dir(dir_type: str) -> str | None:
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
+        logger.debug("Failed to resolve XDG user directory for %s", dir_type, exc_info=True)
 
     return None
 
@@ -404,7 +404,7 @@ def _resolve_portal_path_via_xattr(portal_path: str) -> str | None:
                 if value:
                     return value.decode("utf-8").rstrip("\x00")
             except (OSError, KeyError):
-                pass
+                continue
     except ImportError:
         logger.debug("xattr module not available for portal path resolution")
     except Exception as e:

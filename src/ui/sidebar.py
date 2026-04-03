@@ -188,7 +188,7 @@ class NavigationSidebar(Gtk.Box):
         Returns:
             The display label, or the view_id if not found
         """
-        for vid, _icon, label in NAVIGATION_ITEMS:
-            if vid == view_id:
-                return _(label)
+        for item in NAVIGATION_ITEMS:
+            if item[0] == view_id:
+                return _(item[2])
         return view_id.capitalize()

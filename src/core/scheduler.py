@@ -1011,5 +1011,5 @@ WantedBy=timers.target
         Returns:
             True if schedule is active, False otherwise
         """
-        is_active, _status = self.get_status()
+        is_active, _ = self.get_status()
         return is_active

@@ -8,7 +8,6 @@ Single responsibility:
 - Multi-path management with add/remove
 """
 
-import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -23,8 +22,6 @@ from ...core.i18n import _
 from ...core.utils import format_scan_path, validate_dropped_files
 from ..compat import open_paths_dialog
 from ..utils import resolve_icon_name
-
-logger = logging.getLogger(__name__)
 
 
 class PathRow(Gtk.ListBoxRow):

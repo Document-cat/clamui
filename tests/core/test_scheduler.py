@@ -134,9 +134,9 @@ class TestSchedulerBackendDetection:
     def test_check_systemd_available_returns_bool(self):
         """Test _check_systemd_available returns a boolean."""
         # Reset cache to test fresh
-        import src.core.scheduler
+        scheduler_module = sys.modules["src.core.scheduler"]
 
-        src.core.scheduler._systemd_available = None
+        scheduler_module._systemd_available = None
 
         result = _check_systemd_available()
         assert isinstance(result, bool)
@@ -144,9 +144,9 @@ class TestSchedulerBackendDetection:
     def test_check_cron_available_returns_bool(self):
         """Test _check_cron_available returns a boolean."""
         # Reset cache to test fresh
-        import src.core.scheduler
+        scheduler_module = sys.modules["src.core.scheduler"]
 
-        src.core.scheduler._cron_available = None
+        scheduler_module._cron_available = None
 
         result = _check_cron_available()
         assert isinstance(result, bool)
@@ -158,24 +158,22 @@ class TestSchedulerBackendDetection:
         systemctl commands work via flatpak-spawn --host. We assume
         systemd is available since most modern Linux desktops have it.
         """
-        import src.core.scheduler
-
         # Reset cache to test fresh
-        src.core.scheduler._systemd_available = None
+        scheduler_module = sys.modules["src.core.scheduler"]
+        scheduler_module._systemd_available = None
 
         with mock.patch("src.core.scheduler.is_flatpak", return_value=True):
             result = _check_systemd_available()
             assert result is True
 
         # Reset cache for other tests
-        src.core.scheduler._systemd_available = None
+        scheduler_module._systemd_available = None
 
     def test_check_systemd_available_checks_which_when_not_flatpak(self):
         """Test _check_systemd_available uses which_host_command outside Flatpak."""
-        import src.core.scheduler
-
         # Reset cache to test fresh
-        src.core.scheduler._systemd_available = None
+        scheduler_module = sys.modules["src.core.scheduler"]
+        scheduler_module._systemd_available = None
 
         with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
             with mock.patch("src.core.scheduler.which_host_command") as mock_which:
@@ -186,7 +184,7 @@ class TestSchedulerBackendDetection:
                 mock_which.assert_called_with("systemctl")
 
         # Reset cache for other tests
-        src.core.scheduler._systemd_available = None
+        scheduler_module._systemd_available = None
 
 
 class TestSchedulerInit:

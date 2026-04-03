@@ -6,12 +6,9 @@ This module provides the SavePage class which handles saving all
 preference changes to ClamAV configuration files and ClamUI settings.
 """
 
-import logging
 import threading
 
 import gi
-
-logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")

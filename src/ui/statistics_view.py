@@ -3,6 +3,7 @@
 Statistics dashboard component for ClamUI displaying scan metrics and protection status.
 """
 
+import logging
 from datetime import datetime
 
 import gi
@@ -27,6 +28,8 @@ from .view_helpers import (
     create_empty_state,
     set_status_class,
 )
+
+logger = logging.getLogger(__name__)
 
 # Lazy-loaded matplotlib references (populated on first chart use)
 _matplotlib_loaded = False
@@ -419,13 +422,16 @@ class StatisticsView(Gtk.Box):
                 self._chart_group.set_description(_("No scan activity recorded"))
                 return
         except Exception:
+            logger.debug("Failed to determine whether chart data is renderable", exc_info=True)
             # If data check fails, just hide the chart
             try:
                 self._canvas.set_visible(False)
                 self._chart_empty_state.set_visible(True)
                 self._chart_group.set_description(_("Unable to render chart"))
             except Exception:
-                pass
+                logger.debug(
+                    "Failed to show chart empty state after renderability check", exc_info=True
+                )
             return
 
         try:
@@ -552,7 +558,7 @@ class StatisticsView(Gtk.Box):
                 self._chart_empty_state.set_visible(True)
                 self._chart_group.set_description(_("Unable to render chart"))
             except Exception:
-                pass
+                logger.debug("Failed to reset chart state after render failure", exc_info=True)
 
     def _on_chart_scroll(self, controller, dx, dy):
         """

@@ -3,7 +3,11 @@
 Dialog components for creating and editing scan profiles.
 """
 
+import logging
+
 import gi
+
+logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -392,7 +396,7 @@ class ProfileDialog(Adw.Window):
                 return
             self._process_selected_targets(files)
         except GLib.Error:
-            pass  # User cancelled
+            return  # User cancelled
 
     def _on_target_folders_selected(self, dialog, result):
         """Handle multiple folder selection for targets."""
@@ -402,7 +406,7 @@ class ProfileDialog(Adw.Window):
                 return
             self._process_selected_targets(files)
         except GLib.Error:
-            pass  # User cancelled
+            return  # User cancelled
 
     def _process_selected_targets(self, files):
         """Process selected files/folders and add to target list."""
@@ -430,7 +434,7 @@ class ProfileDialog(Adw.Window):
                         self._add_exclusion_path_to_list(path)
 
         except GLib.Error:
-            pass  # User cancelled
+            return  # User cancelled
 
     def _add_target_to_list(self, path: str):
         """Add a target path to the list UI."""
@@ -1300,7 +1304,7 @@ class ProfileListDialog(Adw.Window):
                 self._refresh_profile_list()
             except ValueError:
                 # Cannot delete default profile - should not happen since button is disabled
-                pass
+                logger.debug("Attempted to delete a protected default profile", exc_info=True)
 
     def _on_use_profile_clicked(self, profile: "ScanProfile"):
         """
@@ -1352,8 +1356,8 @@ class ProfileListDialog(Adw.Window):
             from pathlib import Path
 
             self._profile_manager.export_profile(profile_id, Path(file_path))
-        except (ValueError, OSError):
-            pass
+        except (ValueError, OSError) as e:
+            logger.warning("Failed to export profile: %s", e)
 
     def _on_profile_saved(self, profile: "ScanProfile"):
         """
@@ -1400,5 +1404,5 @@ class ProfileListDialog(Adw.Window):
 
             self._profile_manager.import_profile(Path(file_path))
             self._refresh_profile_list()
-        except (ValueError, OSError):
-            pass
+        except (ValueError, OSError) as e:
+            logger.warning("Failed to import profile: %s", e)

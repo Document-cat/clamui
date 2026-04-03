@@ -37,7 +37,7 @@ def _cleanup_all_managers() -> None:
         try:
             manager._close_pipes()
         except Exception:
-            pass
+            logger.debug("Failed to close tray manager pipes during atexit cleanup", exc_info=True)
 
 
 class TrayManager:
@@ -102,7 +102,7 @@ class TrayManager:
                 try:
                     pipe.close()
                 except Exception:
-                    pass
+                    logger.debug("Failed to close tray subprocess pipe", exc_info=True)
 
     def start(self) -> bool:
         """

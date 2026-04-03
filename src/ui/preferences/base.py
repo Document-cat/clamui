@@ -442,8 +442,8 @@ def populate_int_field(config, widgets_dict: dict, key: str) -> None:
     if config.has_key(key):
         try:
             set_widget_value(widgets_dict, key, int(config.get_value(key)))
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug("Invalid integer value for config key '%s': %s", key, e)
 
 
 def populate_text_field(config, widgets_dict: dict, key: str) -> None:
@@ -567,7 +567,7 @@ class PreferencesPageMixin:
         try:
             dialog.set_transient_for(parent)
         except TypeError:
-            pass  # self is not a Gtk.Window and _parent_window is not set
+            logger.debug("No valid transient parent available for dialog", exc_info=True)
 
         # Create content
         toolbar_view = create_toolbar_view()

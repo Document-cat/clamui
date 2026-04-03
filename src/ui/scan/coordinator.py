@@ -37,8 +37,11 @@ logger = logging.getLogger(__name__)
 class MainViewHost(Protocol):
     """Protocol for windows that can host main UI views."""
 
-    def set_content_view(self, view) -> None: ...
-    def set_active_view(self, view_name: str) -> None: ...
+    def set_content_view(self, view) -> None:
+        pass
+
+    def set_active_view(self, view_name: str) -> None:
+        pass
 
 
 class ScanCoordinator:

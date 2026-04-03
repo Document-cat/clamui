@@ -243,6 +243,7 @@ class Scanner:
         profile_exclusions: dict | None = None,
         progress_callback: Callable[[ScanProgress], None] | None = None,
         backend_override: str | None = None,
+        daemon_force_stream: bool = False,
     ) -> ScanResult:
         """
         Execute a synchronous scan on the given path.
@@ -266,6 +267,8 @@ class Scanner:
                               ScanProgress updates as files are scanned.
             backend_override: Optional one-shot backend override for this scan.
                               Uses the provided backend without changing saved settings.
+            daemon_force_stream: Force the daemon backend to use clamdscan's
+                                 --stream mode for this scan.
 
         Returns:
             ScanResult with scan details
@@ -289,7 +292,11 @@ class Scanner:
         # For daemon-only mode, delegate entirely to daemon scanner
         if backend == "daemon":
             return self._get_daemon_scanner().scan_sync(
-                path, recursive, profile_exclusions, progress_callback=progress_callback
+                path,
+                recursive,
+                profile_exclusions,
+                progress_callback=progress_callback,
+                force_stream=daemon_force_stream,
             )
 
         # For auto mode, try daemon first if available
@@ -297,7 +304,11 @@ class Scanner:
             is_daemon_available = self._is_daemon_available_cached()
             if is_daemon_available:
                 return self._get_daemon_scanner().scan_sync(
-                    path, recursive, profile_exclusions, progress_callback=progress_callback
+                    path,
+                    recursive,
+                    profile_exclusions,
+                    progress_callback=progress_callback,
+                    force_stream=daemon_force_stream,
                 )
 
         # Fall through to clamscan for "clamscan" mode or auto fallback
@@ -328,7 +339,8 @@ class Scanner:
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     env=get_clean_env(),
                 )
 
@@ -482,7 +494,7 @@ class Scanner:
                         file_count += 1
         except (PermissionError, OSError):
             # If we can't access the directory, return 0
-            pass
+            return file_count
 
         return file_count
 
@@ -601,6 +613,7 @@ class Scanner:
         recursive: bool = True,
         profile_exclusions: dict | None = None,
         progress_callback: Callable[[ScanProgress], None] | None = None,
+        daemon_force_stream: bool = False,
     ) -> None:
         """
         Execute an asynchronous scan on the given path.
@@ -630,10 +643,18 @@ class Scanner:
             progress_callback: Optional callback for real-time progress updates.
                               If provided, callback receives ScanProgress updates
                               as files are scanned.
+            daemon_force_stream: Force the daemon backend to use clamdscan's
+                                 --stream mode for this scan.
         """
 
         def scan_thread():
-            result = self.scan_sync(path, recursive, profile_exclusions, progress_callback)
+            result = self.scan_sync(
+                path,
+                recursive,
+                profile_exclusions,
+                progress_callback,
+                daemon_force_stream=daemon_force_stream,
+            )
             # Schedule callback on main thread
             GLib.idle_add(callback, result)
 

@@ -103,7 +103,7 @@ class TestSetupGuides:
     """Test SETUP_GUIDES data structure."""
 
     def test_has_all_components(self, mock_gi_modules):
-        _, _, SETUP_GUIDES = _import_view(mock_gi_modules)
+        SETUP_GUIDES = _import_view(mock_gi_modules)[2]
 
         assert "clamscan" in SETUP_GUIDES
         assert "freshclam" in SETUP_GUIDES
@@ -113,7 +113,7 @@ class TestSetupGuides:
 
     @pytest.mark.parametrize("component_id", ["clamscan", "freshclam", "clamdscan", "clamd"])
     def test_guide_has_required_keys(self, mock_gi_modules, component_id):
-        _, _, SETUP_GUIDES = _import_view(mock_gi_modules)
+        SETUP_GUIDES = _import_view(mock_gi_modules)[2]
         guide = SETUP_GUIDES[component_id]
 
         assert "title" in guide
@@ -123,7 +123,7 @@ class TestSetupGuides:
 
     @pytest.mark.parametrize("component_id", ["clamscan", "freshclam", "clamdscan", "clamd"])
     def test_guide_commands_are_tuples(self, mock_gi_modules, component_id):
-        _, _, SETUP_GUIDES = _import_view(mock_gi_modules)
+        SETUP_GUIDES = _import_view(mock_gi_modules)[2]
         guide = SETUP_GUIDES[component_id]
 
         for item in guide["commands"]:

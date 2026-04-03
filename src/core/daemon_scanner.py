@@ -99,6 +99,7 @@ class DaemonScanner:
         profile_exclusions: dict | None = None,
         count_targets: bool = True,
         progress_callback: Callable[[ScanProgress], None] | None = None,
+        force_stream: bool = False,
     ) -> ScanResult:
         """
         Execute a synchronous scan using clamdscan.
@@ -117,6 +118,8 @@ class DaemonScanner:
             progress_callback: Optional callback for real-time progress updates.
                               If provided, verbose mode is used and callback receives
                               ScanProgress updates as files are scanned.
+            force_stream: Force clamdscan to use the INSTREAM protocol for this
+                          scan instead of the faster fdpass/multiscan path.
 
         Returns:
             ScanResult with scan details
@@ -199,6 +202,7 @@ class DaemonScanner:
                 profile_exclusions,
                 verbose=progress_callback is not None,
                 file_list_path=file_list_path,
+                force_stream=force_stream,
             )
 
             with self._process_lock:
@@ -206,7 +210,8 @@ class DaemonScanner:
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     env=get_clean_env(),
                 )
 
@@ -286,7 +291,11 @@ class DaemonScanner:
                 try:
                     os.unlink(file_list_path)
                 except OSError:
-                    pass
+                    logger.debug(
+                        "Failed to remove temporary clamd file list %s",
+                        file_list_path,
+                        exc_info=True,
+                    )
 
     def scan_async(
         self,
@@ -349,15 +358,19 @@ class DaemonScanner:
         profile_exclusions: dict | None = None,
         verbose: bool = False,
         file_list_path: str | None = None,
+        force_stream: bool = False,
     ) -> list[str]:
         """
         Build the clamdscan command arguments.
 
-        Uses --multiscan for parallel scanning and --fdpass for
-        file descriptor passing when not in verbose mode. In verbose mode,
-        uses --file-list to feed individual files so clamdscan emits per-file
-        results on stdout (scanning a directory only produces one summary line).
-        Also prepends stdbuf -oL to force line-buffered stdout.
+        Uses --multiscan for parallel scanning and --fdpass for file
+        descriptor passing during regular daemon scans. In verbose mode,
+        prepends stdbuf -oL and uses --file-list so clamdscan emits
+        per-file results on stdout (scanning a directory only produces
+        one summary line). File-list scans still use --fdpass by default,
+        because bare "-v --file-list" may fall back to daemon-side path
+        checks that fail with permission errors. When force_stream is set,
+        uses clamdscan's --stream mode for this scan instead of fdpass.
 
         Args:
             path: Path to scan (used as target when file_list_path is None)
@@ -367,6 +380,7 @@ class DaemonScanner:
                     When True, clamdscan outputs each file as it's scanned.
             file_list_path: Path to temp file containing one file path per line.
                     Used in verbose mode for per-file progress output.
+            force_stream: Whether to force client-side streaming for this scan.
 
         Returns:
             List of command arguments (wrapped with flatpak-spawn if in Flatpak)
@@ -383,11 +397,15 @@ class DaemonScanner:
         else:
             cmd = ["clamdscan"]
 
-        # --multiscan and --fdpass are fast but suppress per-file stdout output:
-        # they cause clamd to process files server-side in parallel, returning
-        # results in bulk at the end. In verbose mode (progress tracking), we
-        # need per-file output so we use the sequential SCAN protocol instead.
-        if not verbose:
+        # For file-list scans, keep --fdpass enabled so clamdscan uses passed
+        # descriptors instead of daemon-side path checks. This preserves the
+        # per-file verbose output needed for progress updates while avoiding
+        # permission-denied results on otherwise readable files.
+        if force_stream:
+            cmd.append("--stream")
+        elif file_list_path is not None:
+            cmd.append("--fdpass")
+        elif not verbose:
             cmd.append("--multiscan")
             cmd.append("--fdpass")
 
@@ -644,7 +662,7 @@ class DaemonScanner:
                             file_paths.append(fp)
         except (PermissionError, OSError):
             # If we can't access the directory, return 0 counts
-            pass
+            logger.debug("Failed to count files in scan target %s", path, exc_info=True)
 
         # Count the root directory itself
         if dir_count > 0 or file_count > 0:
