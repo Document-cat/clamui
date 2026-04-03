@@ -20,7 +20,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk
+gi.require_version("Gdk", "4.0")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from ..core.i18n import _
 from ..core.system_audit import (
@@ -461,10 +462,25 @@ class AuditView(Gtk.Box):
         row.set_title(check.name)
         row.set_subtitle(check.detail)
 
+        # Suffix box: info link + status icon
+        suffix_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        suffix_box.set_valign(Gtk.Align.CENTER)
+
+        # Info link button (if URL provided)
+        if check.info_url:
+            info_button = Gtk.Button()
+            info_button.set_icon_name(resolve_icon_name("help-about-symbolic"))
+            info_button.set_tooltip_text(_("Learn more"))
+            info_button.add_css_class("flat")
+            info_button.add_css_class("dim-label")
+            info_button.connect("clicked", self._on_info_clicked, check.info_url)
+            suffix_box.append(info_button)
+
         # Status icon — use Gio.ThemedIcon for cross-theme fallbacks
         status_icon = self._create_status_image(check.status)
-        status_icon.set_valign(Gtk.Align.CENTER)
-        safe_add_suffix(row, status_icon)
+        suffix_box.append(status_icon)
+
+        safe_add_suffix(row, suffix_box)
 
         group.add(row)
         added.append(row)
@@ -652,6 +668,17 @@ class AuditView(Gtk.Box):
             return
         self._cached_report = None
         self._run_audit()
+
+    def _on_info_clicked(self, button: Gtk.Button, url: str):
+        """Open info URL in the default browser."""
+        try:
+            Gtk.show_uri(None, url, Gdk.CURRENT_TIME)
+        except Exception:
+            # Fallback: try Gio
+            try:
+                Gio.AppInfo.launch_default_for_uri(url, None)
+            except Exception:
+                logger.warning("Could not open URL: %s", url)
 
     def _on_copy_clicked(self, button: Gtk.Button, command: str):
         """Copy command text to clipboard with visual feedback."""

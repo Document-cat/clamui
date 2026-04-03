@@ -66,6 +66,27 @@ class AuditCategory(Enum):
     DEEP_SCAN_ROOTKIT = "deep_scan_rootkit"
 
 
+# Reference URLs for security audit checks — official docs and guides
+_URLS = {
+    "clamav": "https://docs.clamav.net/",
+    "clamav_freshclam": "https://docs.clamav.net/manual/Usage/SignatureManagement.html",
+    "clamav_clamd": "https://docs.clamav.net/manual/Usage/Scanning.html#clamd",
+    "ufw": "https://wiki.archlinux.org/title/Uncomplicated_Firewall",
+    "firewalld": "https://firewalld.org/documentation/",
+    "nftables": "https://wiki.archlinux.org/title/Nftables",
+    "apparmor": "https://wiki.archlinux.org/title/AppArmor",
+    "selinux": "https://wiki.archlinux.org/title/SELinux",
+    "unattended_upgrades": "https://wiki.debian.org/UnattendedUpgrades",
+    "dnf_automatic": "https://dnf.readthedocs.io/en/latest/automatic.html",
+    "fail2ban": "https://github.com/fail2ban/fail2ban/wiki",
+    "crowdsec": "https://docs.crowdsec.net/",
+    "ssh_hardening": "https://wiki.archlinux.org/title/OpenSSH#Protection",
+    "ssh_root_login": "https://man7.org/linux/man-pages/man5/sshd_config.5.html",
+    "lynis": "https://cisofy.com/lynis/",
+    "chkrootkit": "https://www.chkrootkit.org/",
+    "open_ports": "https://wiki.archlinux.org/title/Security#Network",
+}
+
 # Status priority for overall_status computation (worst wins)
 _STATUS_PRIORITY = [
     AuditStatus.FAIL,
@@ -91,6 +112,7 @@ class AuditCheckResult:
     detail: str
     recommendation: str | None = None
     install_command: str | None = None
+    info_url: str | None = None
 
 
 @dataclass
@@ -278,6 +300,7 @@ def check_clamav_health() -> AuditSectionResult:
                 name=_("ClamAV Installation"),
                 status=AuditStatus.PASS,
                 detail=_("Installed: {version}").format(version=version_or_error),
+                info_url=_URLS["clamav"],
             )
         )
     else:
@@ -288,6 +311,7 @@ def check_clamav_health() -> AuditSectionResult:
                 detail=_("ClamAV is not installed"),
                 recommendation=_("Install ClamAV to enable virus scanning"),
                 install_command="sudo apt install clamav clamav-daemon",
+                info_url=_URLS["clamav"],
             )
         )
         return section  # No point checking further
@@ -305,6 +329,7 @@ def check_clamav_health() -> AuditSectionResult:
                         detail=_("Up to date ({days} days old, built {date})").format(
                             days=days_old, date=date_str
                         ),
+                        info_url=_URLS["clamav_freshclam"],
                     )
                 )
             elif days_old <= 7:
@@ -317,6 +342,7 @@ def check_clamav_health() -> AuditSectionResult:
                         ),
                         recommendation=_("Update virus database to ensure protection"),
                         install_command="sudo freshclam",
+                        info_url=_URLS["clamav_freshclam"],
                     )
                 )
             else:
@@ -329,6 +355,7 @@ def check_clamav_health() -> AuditSectionResult:
                         ),
                         recommendation=_("Database is critically outdated. Update immediately."),
                         install_command="sudo freshclam",
+                        info_url=_URLS["clamav_freshclam"],
                     )
                 )
         else:
@@ -337,6 +364,7 @@ def check_clamav_health() -> AuditSectionResult:
                     name=_("Virus Database"),
                     status=AuditStatus.UNKNOWN,
                     detail=_("Could not determine database age: {error}").format(error=date_str),
+                    info_url=_URLS["clamav_freshclam"],
                 )
             )
     else:
@@ -349,6 +377,7 @@ def check_clamav_health() -> AuditSectionResult:
                     detail=_("No virus database found"),
                     recommendation=_("Download virus database"),
                     install_command="sudo freshclam",
+                    info_url=_URLS["clamav_freshclam"],
                 )
             )
         else:
@@ -357,6 +386,7 @@ def check_clamav_health() -> AuditSectionResult:
                     name=_("Virus Database"),
                     status=AuditStatus.UNKNOWN,
                     detail=_("Database files exist but age could not be determined"),
+                    info_url=_URLS["clamav_freshclam"],
                 )
             )
 
@@ -369,6 +399,7 @@ def check_clamav_health() -> AuditSectionResult:
                     name=_("ClamAV Daemon"),
                     status=AuditStatus.PASS,
                     detail=_("Service {name} is running").format(name=service_name),
+                    info_url=_URLS["clamav_clamd"],
                 )
             )
             break
@@ -381,6 +412,7 @@ def check_clamav_health() -> AuditSectionResult:
                     name=_("ClamAV Daemon"),
                     status=AuditStatus.PASS,
                     detail=_("Daemon is responding"),
+                    info_url=_URLS["clamav_clamd"],
                 )
             )
         else:
@@ -391,6 +423,7 @@ def check_clamav_health() -> AuditSectionResult:
                     detail=_("ClamAV daemon is not running"),
                     recommendation=_("Start the daemon for faster scanning"),
                     install_command="sudo systemctl start clamav-daemon",
+                    info_url=_URLS["clamav_clamd"],
                 )
             )
 
@@ -403,6 +436,7 @@ def check_clamav_health() -> AuditSectionResult:
                     name=_("Automatic Updates"),
                     status=AuditStatus.PASS,
                     detail=_("Freshclam service is active"),
+                    info_url=_URLS["clamav_freshclam"],
                 )
             )
             break
@@ -414,6 +448,7 @@ def check_clamav_health() -> AuditSectionResult:
                 detail=_("Freshclam automatic update service is not running"),
                 recommendation=_("Enable automatic database updates"),
                 install_command="sudo systemctl enable --now clamav-freshclam",
+                info_url=_URLS["clamav_freshclam"],
             )
         )
 
@@ -442,6 +477,7 @@ def check_firewall() -> AuditSectionResult:
                         name=_("UFW Firewall"),
                         status=AuditStatus.PASS,
                         detail=_("UFW is active and enabled"),
+                        info_url=_URLS["ufw"],
                     )
                 )
                 firewall_found = True
@@ -453,6 +489,7 @@ def check_firewall() -> AuditSectionResult:
                         detail=_("UFW service is running but firewall may be disabled"),
                         recommendation=_("Enable the firewall"),
                         install_command="sudo ufw enable",
+                        info_url=_URLS["ufw"],
                     )
                 )
                 firewall_found = True
@@ -466,6 +503,7 @@ def check_firewall() -> AuditSectionResult:
                     name=_("Firewalld"),
                     status=AuditStatus.PASS,
                     detail=_("Firewalld is running"),
+                    info_url=_URLS["firewalld"],
                 )
             )
             firewall_found = True
@@ -477,6 +515,7 @@ def check_firewall() -> AuditSectionResult:
                     detail=_("Firewalld is installed but not running"),
                     recommendation=_("Start the firewall"),
                     install_command="sudo systemctl start firewalld",
+                    info_url=_URLS["firewalld"],
                 )
             )
             firewall_found = True
@@ -490,6 +529,7 @@ def check_firewall() -> AuditSectionResult:
                     name=_("nftables"),
                     status=AuditStatus.PASS,
                     detail=_("nftables service is active"),
+                    info_url=_URLS["nftables"],
                 )
             )
             firewall_found = True
@@ -502,6 +542,7 @@ def check_firewall() -> AuditSectionResult:
                 detail=_("No active firewall detected"),
                 recommendation=_("Install and enable a firewall for network protection"),
                 install_command="sudo apt install ufw && sudo ufw enable",
+                info_url=_URLS["ufw"],
             )
         )
 
@@ -575,6 +616,7 @@ def _check_open_ports(section: AuditSectionResult) -> None:
                     count=port_count, ports=", ".join(risky_found)
                 ),
                 recommendation=_("Review if these services need to be exposed"),
+                info_url=_URLS["open_ports"],
             )
         )
     elif port_count > 20:
@@ -584,6 +626,7 @@ def _check_open_ports(section: AuditSectionResult) -> None:
                 status=AuditStatus.WARNING,
                 detail=_("{count} ports listening").format(count=port_count),
                 recommendation=_("High number of open ports. Review running services."),
+                info_url=_URLS["open_ports"],
             )
         )
     else:
@@ -592,6 +635,7 @@ def _check_open_ports(section: AuditSectionResult) -> None:
                 name=_("Open Ports"),
                 status=AuditStatus.PASS,
                 detail=_("{count} ports listening").format(count=port_count),
+                info_url=_URLS["open_ports"],
             )
         )
 
@@ -651,6 +695,7 @@ def _check_apparmor() -> AuditCheckResult | None:
                 name=_("AppArmor"),
                 status=AuditStatus.PASS,
                 detail=_("AppArmor is enabled"),
+                info_url=_URLS["apparmor"],
             )
         else:
             return AuditCheckResult(
@@ -658,6 +703,7 @@ def _check_apparmor() -> AuditCheckResult | None:
                 status=AuditStatus.WARNING,
                 detail=_("AppArmor module is loaded but not enabled"),
                 recommendation=_("Enable AppArmor for application sandboxing"),
+                info_url=_URLS["apparmor"],
             )
     except OSError:
         return None
@@ -675,6 +721,7 @@ def _check_selinux() -> AuditCheckResult | None:
             name=_("SELinux"),
             status=AuditStatus.PASS,
             detail=_("SELinux is enforcing"),
+            info_url=_URLS["selinux"],
         )
     elif mode == "permissive":
         return AuditCheckResult(
@@ -682,6 +729,7 @@ def _check_selinux() -> AuditCheckResult | None:
             status=AuditStatus.WARNING,
             detail=_("SELinux is in permissive mode"),
             recommendation=_("Consider switching to enforcing mode for stronger protection"),
+            info_url=_URLS["selinux"],
         )
     elif mode == "disabled":
         return AuditCheckResult(
@@ -689,6 +737,7 @@ def _check_selinux() -> AuditCheckResult | None:
             status=AuditStatus.FAIL,
             detail=_("SELinux is disabled"),
             recommendation=_("Enable SELinux for mandatory access control"),
+            info_url=_URLS["selinux"],
         )
     return None
 
@@ -713,6 +762,7 @@ def check_auto_updates() -> AuditSectionResult:
                     name=_("Unattended Upgrades"),
                     status=AuditStatus.PASS,
                     detail=_("Automatic security updates are enabled"),
+                    info_url=_URLS["unattended_upgrades"],
                 )
             )
             updates_found = True
@@ -724,6 +774,7 @@ def check_auto_updates() -> AuditSectionResult:
                     detail=_("Unattended upgrades is installed but disabled"),
                     recommendation=_("Enable automatic security updates"),
                     install_command="sudo dpkg-reconfigure unattended-upgrades",
+                    info_url=_URLS["unattended_upgrades"],
                 )
             )
             updates_found = True
@@ -737,6 +788,7 @@ def check_auto_updates() -> AuditSectionResult:
                     name=_("DNF Automatic"),
                     status=AuditStatus.PASS,
                     detail=_("DNF automatic updates are enabled"),
+                    info_url=_URLS["dnf_automatic"],
                 )
             )
             updates_found = True
@@ -749,6 +801,7 @@ def check_auto_updates() -> AuditSectionResult:
                     detail=_("DNF automatic is installed but timer is not active"),
                     recommendation=_("Enable automatic updates"),
                     install_command="sudo systemctl enable --now dnf-automatic.timer",
+                    info_url=_URLS["dnf_automatic"],
                 )
             )
             updates_found = True
@@ -815,6 +868,7 @@ def check_intrusion_detection() -> AuditSectionResult:
                 name=_("fail2ban"),
                 status=AuditStatus.PASS,
                 detail=_("fail2ban is active and protecting services"),
+                info_url=_URLS["fail2ban"],
             )
         )
         ids_found = True
@@ -827,6 +881,7 @@ def check_intrusion_detection() -> AuditSectionResult:
                 detail=_("fail2ban is installed but not running"),
                 recommendation=_("Start fail2ban to protect against brute force attacks"),
                 install_command="sudo systemctl start fail2ban",
+                info_url=_URLS["fail2ban"],
             )
         )
         ids_found = True
@@ -839,6 +894,7 @@ def check_intrusion_detection() -> AuditSectionResult:
                 name=_("CrowdSec"),
                 status=AuditStatus.PASS,
                 detail=_("CrowdSec is active with community threat intelligence"),
+                info_url=_URLS["crowdsec"],
             )
         )
         ids_found = True
@@ -851,6 +907,7 @@ def check_intrusion_detection() -> AuditSectionResult:
                 detail=_("CrowdSec is installed but not running"),
                 recommendation=_("Start CrowdSec for collaborative intrusion prevention"),
                 install_command="sudo systemctl start crowdsec",
+                info_url=_URLS["crowdsec"],
             )
         )
         ids_found = True
@@ -869,6 +926,7 @@ def check_intrusion_detection() -> AuditSectionResult:
                 detail=_("No intrusion detection system found"),
                 recommendation=_("Install fail2ban or CrowdSec to protect against attacks"),
                 install_command=install_cmd,
+                info_url=_URLS["fail2ban"],
             )
         )
 
@@ -897,6 +955,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 name=_("SSH Server"),
                 status=AuditStatus.PASS,
                 detail=_("SSH server is not running (no remote attack surface)"),
+                info_url=_URLS["ssh_hardening"],
             )
         )
         return section
@@ -906,6 +965,7 @@ def check_ssh_hardening() -> AuditSectionResult:
             name=_("SSH Server"),
             status=AuditStatus.PASS,
             detail=_("SSH server is running"),
+            info_url=_URLS["ssh_hardening"],
         )
     )
 
@@ -917,6 +977,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 name=_("SSH Configuration"),
                 status=AuditStatus.UNKNOWN,
                 detail=_("Could not read SSH configuration"),
+                info_url=_URLS["ssh_hardening"],
             )
         )
         return section
@@ -929,6 +990,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 name=_("Root Login"),
                 status=AuditStatus.PASS,
                 detail=_("Root login: {value}").format(value=root_login),
+                info_url=_URLS["ssh_root_login"],
             )
         )
     else:
@@ -938,6 +1000,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 status=AuditStatus.FAIL,
                 detail=_("Root login is allowed ({value})").format(value=root_login),
                 recommendation=_("Disable root SSH login for security"),
+                info_url=_URLS["ssh_root_login"],
             )
         )
 
@@ -949,6 +1012,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 name=_("Password Auth"),
                 status=AuditStatus.PASS,
                 detail=_("Password authentication is disabled (key-only)"),
+                info_url=_URLS["ssh_root_login"],
             )
         )
     else:
@@ -958,6 +1022,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 status=AuditStatus.WARNING,
                 detail=_("Password authentication is enabled"),
                 recommendation=_("Consider disabling password auth in favor of SSH keys"),
+                info_url=_URLS["ssh_root_login"],
             )
         )
 
@@ -969,6 +1034,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 name=_("X11 Forwarding"),
                 status=AuditStatus.PASS,
                 detail=_("X11 forwarding is disabled"),
+                info_url=_URLS["ssh_root_login"],
             )
         )
     else:
@@ -978,6 +1044,7 @@ def check_ssh_hardening() -> AuditSectionResult:
                 status=AuditStatus.WARNING,
                 detail=_("X11 forwarding is enabled"),
                 recommendation=_("Disable X11 forwarding to reduce attack surface"),
+                info_url=_URLS["ssh_root_login"],
             )
         )
 
@@ -1044,6 +1111,7 @@ def run_lynis_audit() -> AuditSectionResult:
                 detail=_("Lynis is not installed"),
                 recommendation=_("Install Lynis for comprehensive security auditing"),
                 install_command="sudo apt install lynis",
+                info_url=_URLS["lynis"],
             )
         )
         return section
@@ -1072,6 +1140,7 @@ def run_lynis_audit() -> AuditSectionResult:
                 name=_("Lynis Audit"),
                 status=AuditStatus.FAIL,
                 detail=_("Lynis audit timed out after 5 minutes"),
+                info_url=_URLS["lynis"],
             )
         )
         return section
@@ -1081,6 +1150,7 @@ def run_lynis_audit() -> AuditSectionResult:
                 name=_("Lynis Audit"),
                 status=AuditStatus.UNKNOWN,
                 detail=_("Failed to run Lynis: {error}").format(error=str(e)),
+                info_url=_URLS["lynis"],
             )
         )
         return section
@@ -1092,6 +1162,7 @@ def run_lynis_audit() -> AuditSectionResult:
                 name=_("Lynis Audit"),
                 status=AuditStatus.SKIPPED,
                 detail=_("Authentication was cancelled"),
+                info_url=_URLS["lynis"],
             )
         )
         return section
@@ -1114,6 +1185,7 @@ def run_lynis_audit() -> AuditSectionResult:
                 recommendation=_("Run 'sudo lynis audit system' for detailed recommendations")
                 if status != AuditStatus.PASS
                 else None,
+                info_url=_URLS["lynis"],
             )
         )
     else:
@@ -1122,6 +1194,7 @@ def run_lynis_audit() -> AuditSectionResult:
                 name=_("Lynis Audit"),
                 status=AuditStatus.PASS if result.returncode == 0 else AuditStatus.WARNING,
                 detail=_("Audit completed (exit code {code})").format(code=result.returncode),
+                info_url=_URLS["lynis"],
             )
         )
 
@@ -1175,6 +1248,7 @@ def run_rootkit_check() -> AuditSectionResult:
                 detail=_("chkrootkit is not installed"),
                 recommendation=_("Install chkrootkit for rootkit detection"),
                 install_command="sudo apt install chkrootkit",
+                info_url=_URLS["chkrootkit"],
             )
         )
         return section
@@ -1194,6 +1268,7 @@ def run_rootkit_check() -> AuditSectionResult:
                 name=_("Rootkit Scan"),
                 status=AuditStatus.FAIL,
                 detail=_("Rootkit scan timed out after 5 minutes"),
+                info_url=_URLS["chkrootkit"],
             )
         )
         return section
@@ -1203,6 +1278,7 @@ def run_rootkit_check() -> AuditSectionResult:
                 name=_("Rootkit Scan"),
                 status=AuditStatus.UNKNOWN,
                 detail=_("Failed to run chkrootkit: {error}").format(error=str(e)),
+                info_url=_URLS["chkrootkit"],
             )
         )
         return section
@@ -1214,6 +1290,7 @@ def run_rootkit_check() -> AuditSectionResult:
                 name=_("Rootkit Scan"),
                 status=AuditStatus.SKIPPED,
                 detail=_("Authentication was cancelled"),
+                info_url=_URLS["chkrootkit"],
             )
         )
         return section
@@ -1229,6 +1306,7 @@ def run_rootkit_check() -> AuditSectionResult:
                 status=AuditStatus.FAIL,
                 detail=_("{count} potential rootkit(s) detected").format(count=len(infected_lines)),
                 recommendation=_("Investigate the detected threats immediately"),
+                info_url=_URLS["chkrootkit"],
             )
         )
         # Add individual findings
@@ -1238,6 +1316,7 @@ def run_rootkit_check() -> AuditSectionResult:
                     name=_("Finding"),
                     status=AuditStatus.FAIL,
                     detail=finding,
+                    info_url=_URLS["chkrootkit"],
                 )
             )
     else:
@@ -1246,6 +1325,7 @@ def run_rootkit_check() -> AuditSectionResult:
                 name=_("Rootkit Scan"),
                 status=AuditStatus.PASS,
                 detail=_("No rootkits detected"),
+                info_url=_URLS["chkrootkit"],
             )
         )
 
