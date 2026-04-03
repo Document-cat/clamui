@@ -38,6 +38,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
 
+from . import __version__
 from .app_lifecycle import AppLifecycleManager
 from .core.clamav_config import (
     normalize_clamd_size_limit_units,
@@ -99,7 +100,7 @@ class ClamUIApp(Adw.Application):
 
         # Application metadata
         self._app_name = "ClamUI"
-        self._version = "0.1.5"
+        self._version = __version__
 
         # Settings and notification management
         self._settings_manager = SettingsManager()

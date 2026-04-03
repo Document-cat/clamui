@@ -1,59 +1,38 @@
-# ClamUI v0.1.5
+# ClamUI v0.1.6
 
-CLI pipeline, security hardening, and broad compatibility improvements.
+Security hardening, daemon-scanner fixes, and release pipeline updates.
 
 ## Highlights
 
-### Full CLI Subcommand Pipeline
-ClamUI can now be driven entirely from the terminal. New subcommands: `scan`, `status`, `history`, `quarantine`, `profile`, and `apply-preferences`.
+### Scanner Reliability
+- Fixed daemon scanning behavior that could miss EICAR detections when `--fdpass` was used
+- Corrected clamd streaming and size-limit unit handling
+- Restored `clamdscan` detection for live-progress scans
+- Improved handling for non-UTF-8 scanner output
 
-### Security Fixes
-- **CVE-2026-31899** (cairosvg decompression-bomb bypass on redirects) — bumped to cairosvg >= 2.9.0
-- Bumped urllib3, numpy, and other dependencies to patched versions
-- Added **CodeQL** static analysis and **Dependabot** to CI
+### Security Hardening
+- Validated destination paths in the privileged config helper
+- Eliminated shell injection risk in updater force-update flows
+- Addressed additional static-analysis and CodeQL findings
 
-### Privacy-Safe Logs
-Scan logs no longer persist file-identifying data. Existing logs are migrated on startup.
+### Dependencies and CI
+- Refreshed dependency pins including `cryptography`, `requests`, `numpy`, `Pillow`, `charset-normalizer`, and `more-itertools`
+- Added a dedicated dependency-audit GitHub Actions workflow
+- Updated GPG import action usage for Node 24 compatibility
 
-## What's New
+## User-Facing Fixes
 
-- Full CLI subcommand pipeline for headless ClamAV management (`scan`, `status`, `history`, `quarantine`, `profile`, `apply-preferences`)
-- Dolphin (KDE Plasma 6) file manager integration
-- Force Adwaita icon theme for cross-runtime icon consistency
-- EICAR self-test now uses clamscan for reliable detection
-- Improved update rate-limit reporting with refreshed translations
-
-## Compatibility
-
-- **Dropped Python 3.10** — minimum is now Python 3.11
-- Ubuntu 22.04 / Pop!_OS 22.04 compatibility for PyGObject < 3.50 and GLib 2.72
-- Ensured broad libadwaita 1.1+ compatibility
-
-## Bug Fixes
-
-- Fixed tray updates and window toggle behavior
-- Fixed duplicate/un-clearable `DatabaseCustomURL` lines in freshclam.conf
-- Hardened preferences save flow against missing widgets
-- Improved preferences save authentication UX
-- Fixed host-aware config check for clamd availability in Flatpak
-- Handle ClamAV runtime warnings and daemon exclusion patterns
-- Fixed thread safety, resource cleanup, and integration bugs
-
-## CI & Infrastructure
-
-- Switched CI to `uv` for faster builds
-- Added CVE dependency scanning and Dependabot
-- Added CodeQL and dependency review workflows
-- Coverage is now opt-in for local `pytest` runs (faster default)
+- Fixed tray profile selection navigation
+- Clarified follow-up quality fixes across scanner and release paths
 
 ## Install
 
 **Flathub** (recommended):
-```
+```bash
 flatpak install flathub io.github.linx_systems.ClamUI
 ```
 
-**AppImage**: Download from the [Releases page](https://github.com/linx-systems/clamui/releases/tag/v0.1.5)
+**GitHub Release**: Download from the [Releases page](https://github.com/linx-systems/clamui/releases/tag/v0.1.6)
 
 **From source**:
 ```bash

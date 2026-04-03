@@ -5,8 +5,8 @@ Supports reading and modifying freshclam.conf and clamd.conf files.
 """
 
 import logging
-import os
 import math
+import os
 import shutil
 import subprocess
 import sys

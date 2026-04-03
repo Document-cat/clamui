@@ -24,8 +24,8 @@ try:
 except (TypeError, AttributeError):
     _HAS_FILE_DIALOG = False
 
-from ...core.clamav_detection import detect_clamd_conf_path
 from ...core.clamav_config import megabytes_to_size_value, size_value_to_megabytes
+from ...core.clamav_detection import detect_clamd_conf_path
 from ...core.flatpak import (
     format_flatpak_portal_path,
     is_flatpak,

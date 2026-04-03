@@ -31,35 +31,35 @@
     <screenshots>
         <screenshot type="default">
             <caption>Main application window</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/main_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/main_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Scan results display</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/main_view_with_scan_result.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/main_view_with_scan_result.png</image>
         </screenshot>
         <screenshot>
             <caption>Analysis view</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/analysis_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/analysis_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Components view</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/components_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/components_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Configuration settings</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.1/screenshots/config_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/config_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Scan history</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/history_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/history_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Profile management</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/profile_management.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/profile_management.png</image>
         </screenshot>
         <screenshot>
             <caption>Quarantine management</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.5/screenshots/quarantine_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/quarantine_view.png</image>
         </screenshot>
     </screenshots>
 
@@ -96,6 +96,19 @@
     </keywords>
 
     <releases>
+        <release version="0.1.6" date="2026-04-03">
+            <description>
+                <p>Security hardening, scanner reliability fixes, and release pipeline updates</p>
+                <ul>
+                    <li>Fix daemon scanning behavior for EICAR detection, clamd streaming, and live progress scans</li>
+                    <li>Harden privileged config saving and updater force-update paths against unsafe input</li>
+                    <li>Handle non-UTF-8 scanner output safely and address static analysis findings</li>
+                    <li>Fix tray profile selection navigation during scan startup flows</li>
+                    <li>Refresh dependency pins including cryptography, requests, numpy, Pillow, and charset-normalizer</li>
+                    <li>Add a dedicated dependency-audit workflow and update CI signing support for Node 24</li>
+                </ul>
+            </description>
+        </release>
         <release version="0.1.5b" date="2026-03-23">
             <description>
                 <p>Bug fixes, Flatpak hardening, and test coverage improvements</p>

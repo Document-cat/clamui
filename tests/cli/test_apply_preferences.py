@@ -8,8 +8,6 @@ import pytest
 
 from src.cli.apply_preferences import _validate_destination, main
 
-_BYPASS_VALIDATION = patch("src.cli.apply_preferences._validate_destination")
-
 
 class TestApplyPreferencesCli:
     """Tests for src.cli.apply_preferences.main."""
@@ -20,7 +18,10 @@ class TestApplyPreferencesCli:
         destination = tmp_path / "dest.conf"
         source.write_text("LogVerbose yes\n", encoding="utf-8")
 
-        with _BYPASS_VALIDATION:
+        with patch.dict(
+            main.__globals__,
+            {"_validate_destination": lambda _destination: None},
+        ):
             exit_code = main([str(source), str(destination)])
 
         assert exit_code == 0
@@ -48,7 +49,10 @@ class TestApplyPreferencesCli:
         destination = tmp_path / "nested" / "path" / "dest.conf"
         source.write_text("DatabaseDirectory /var/lib/clamav\n", encoding="utf-8")
 
-        with _BYPASS_VALIDATION:
+        with patch.dict(
+            main.__globals__,
+            {"_validate_destination": lambda _destination: None},
+        ):
             exit_code = main([str(source), str(destination)])
 
         assert exit_code == 0
