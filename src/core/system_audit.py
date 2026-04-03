@@ -651,7 +651,7 @@ def _check_open_ports(section: AuditSectionResult) -> None:
         section.checks.append(
             AuditCheckResult(
                 name=_("Open Ports"),
-                status=AuditStatus.WARNING,
+                status=AuditStatus.FAIL,
                 detail=_("{count} ports listening, risky ports: {ports}").format(
                     count=port_count, ports=", ".join(risky_found)
                 ),
@@ -659,13 +659,13 @@ def _check_open_ports(section: AuditSectionResult) -> None:
                 info_url=_URLS["open_ports"],
             )
         )
-    elif port_count > 20:
+    elif port_count > 0:
         section.checks.append(
             AuditCheckResult(
                 name=_("Open Ports"),
                 status=AuditStatus.WARNING,
                 detail=_("{count} ports listening").format(count=port_count),
-                recommendation=_("High number of open ports. Review running services."),
+                recommendation=_("Review open ports and close unnecessary services"),
                 info_url=_URLS["open_ports"],
             )
         )
@@ -674,7 +674,7 @@ def _check_open_ports(section: AuditSectionResult) -> None:
             AuditCheckResult(
                 name=_("Open Ports"),
                 status=AuditStatus.PASS,
-                detail=_("{count} ports listening").format(count=port_count),
+                detail=_("No open ports detected"),
                 info_url=_URLS["open_ports"],
             )
         )
