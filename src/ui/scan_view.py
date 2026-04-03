@@ -1853,8 +1853,11 @@ class ScanView(Gtk.Box):
             # Schedule UI update on main thread
             GLib.idle_add(self._on_scan_complete, aggregated_result)
         except Exception as e:
-            logger.error(f"Scan error: {e}")
-            GLib.idle_add(self._on_scan_error, str(e))
+            logger.error("Scan error: %s", e)
+            GLib.idle_add(
+                self._on_scan_error,
+                str(e).encode("utf-8", errors="replace").decode("utf-8"),
+            )
 
     def _update_scan_progress(
         self,
@@ -1985,7 +1988,10 @@ class ScanView(Gtk.Box):
             set_status_class(self._status_banner, StatusLevel.ERROR)
             self._status_banner.set_revealed(True)
             logger.error(
-                f"Scan failed: {error_detail}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+                "Scan failed: %s, stdout=%r, stderr=%r",
+                error_detail,
+                result.stdout,
+                result.stderr,
             )
         else:
             self._show_view_results(0)

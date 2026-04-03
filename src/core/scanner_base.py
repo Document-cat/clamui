@@ -242,7 +242,7 @@ def stream_process_output(
                         on_line(line)
 
     except OSError as e:
-        logger.warning(f"Error streaming process output: {e}")
+        logger.warning("Error streaming process output: %s", e)
         # Try to get any remaining output
         try:
             remaining_stdout, remaining_stderr = process.communicate(timeout=2.0)
