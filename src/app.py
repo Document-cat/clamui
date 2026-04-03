@@ -118,6 +118,7 @@ class ClamUIApp(Adw.Application):
         self._components_view = None
         self._statistics_view = None
         self._quarantine_view = None
+        self._audit_view = None
         self._current_view = None
 
         # Tray indicator (initialized in do_startup if available)
@@ -285,6 +286,15 @@ class ClamUIApp(Adw.Application):
                 quarantine_manager=self.quarantine_manager,
             )
         return self._quarantine_view
+
+    @property
+    def audit_view(self):
+        """Get the audit view instance, creating it lazily if needed."""
+        if self._audit_view is None:
+            from .ui.audit_view import AuditView
+
+            self._audit_view = AuditView()
+        return self._audit_view
 
     def do_activate(self):
         """Activate the application, creating the main window."""
@@ -627,6 +637,14 @@ class ClamUIApp(Adw.Application):
             win.set_content_view(self.statistics_view)
             win.set_active_view("statistics")
             self._current_view = "statistics"
+
+    def _on_show_audit(self, action, param):
+        """Handle the show-audit action."""
+        win = self.props.active_window
+        if win:
+            win.set_content_view(self.audit_view)
+            win.set_active_view("audit")
+            self._current_view = "audit"
 
     def _on_start_scan(self, action, param):
         """Handle the start-scan action."""
