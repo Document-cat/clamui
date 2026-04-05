@@ -311,7 +311,9 @@ class ClamUIApp(Adw.Application):
         if self._audit_view is None:
             from .ui.audit_view import AuditView
 
-            self._audit_view = AuditView()
+            self._audit_view = AuditView(
+                notification_manager=self._notification_manager,
+            )
         return self._audit_view
 
     def do_activate(self):

@@ -83,12 +83,14 @@ _STATUS_LEVELS: dict[AuditStatus, StatusLevel] = {
 class AuditView(Gtk.Box):
     """System security audit dashboard view."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, notification_manager=None, **kwargs):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, **kwargs)
 
         self._is_checking = False
         self._destroyed = False
         self._cached_report: AuditReport | None = None
+        self._notification_manager = notification_manager
+        self._is_first_run = True
 
         # Widget references for dynamic updates
         self._section_groups: dict[str, Adw.PreferencesGroup] = {}
@@ -413,13 +415,25 @@ class AuditView(Gtk.Box):
         return False  # Don't repeat
 
     def _finalize_audit(self, report: AuditReport) -> bool:
-        """Complete the audit: update summary banner and cache results."""
+        """Complete the audit: update summary banner, cache results, and notify."""
         if self._destroyed:
             return False
 
         self._cached_report = report
         self._update_summary_banner(report)
         self._set_checking_state(False)
+
+        # Notify on first run only, if there are issues
+        if self._is_first_run and self._notification_manager is not None:
+            self._is_first_run = False
+            summary = report.summary
+            warnings = summary.get(AuditStatus.WARNING, 0)
+            issues = summary.get(AuditStatus.FAIL, 0)
+            if warnings or issues:
+                self._notification_manager.notify_audit_complete(
+                    warnings=warnings, issues=issues
+                )
+
         return False  # Don't repeat
 
     # =========================================================================
