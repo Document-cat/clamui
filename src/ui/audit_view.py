@@ -79,6 +79,11 @@ _STATUS_LEVELS: dict[AuditStatus, StatusLevel] = {
     AuditStatus.FAIL: StatusLevel.ERROR,
 }
 
+_DEEP_SCAN_INFO_URLS = {
+    "lynis": "https://cisofy.com/lynis/",
+    "chkrootkit": "https://www.chkrootkit.org/",
+}
+
 
 class AuditView(Gtk.Box):
     """System security audit dashboard view."""
@@ -105,6 +110,7 @@ class AuditView(Gtk.Box):
         self._rootkit_button: Gtk.Button | None = None
         self._lynis_spinner: Gtk.Spinner | None = None
         self._rootkit_spinner: Gtk.Spinner | None = None
+        self._deep_scan_install_rows: dict[str, Adw.ActionRow] = {}
 
         # Track whether initial data load has happened
         self._initial_load_done = False
@@ -243,15 +249,15 @@ class AuditView(Gtk.Box):
         )
 
         # Lynis row — shows "Checking..." initially, updated after availability check
-        self._lynis_row = Adw.ActionRow()
-        self._lynis_row.set_title(_("Lynis Security Audit"))
-        self._lynis_row.set_subtitle(_("Checking availability..."))
+        self._lynis_row = self._create_deep_scan_action_row(
+            _("Lynis Security Audit"), _("Checking availability...")
+        )
         self._deep_scan_group.add(self._lynis_row)
 
         # chkrootkit row — same pattern
-        self._rootkit_row = Adw.ActionRow()
-        self._rootkit_row.set_title(_("Rootkit Detection"))
-        self._rootkit_row.set_subtitle(_("Checking availability..."))
+        self._rootkit_row = self._create_deep_scan_action_row(
+            _("Rootkit Detection"), _("Checking availability...")
+        )
         self._deep_scan_group.add(self._rootkit_row)
 
         # Deep scan results container (hidden until scan runs)
@@ -261,36 +267,72 @@ class AuditView(Gtk.Box):
         parent.append(self._deep_scan_group)
         parent.append(self._deep_scan_results_box)
 
+    def _create_deep_scan_action_row(self, title: str, subtitle: str) -> Adw.ActionRow:
+        """Create a base ActionRow for a deep scan tool."""
+        row = Adw.ActionRow()
+        row.set_title(title)
+        row.set_subtitle(subtitle)
+        return row
+
+    def _reset_deep_scan_rows(self):
+        """Rebuild deep scan rows to avoid duplicated suffixes and command rows."""
+        for row in (self._lynis_row, self._rootkit_row):
+            if row is not None:
+                self._deep_scan_group.remove(row)
+
+        for row in self._deep_scan_install_rows.values():
+            self._deep_scan_group.remove(row)
+        self._deep_scan_install_rows = {}
+
+        self._lynis_row = self._create_deep_scan_action_row(
+            _("Lynis Security Audit"), _("Checking availability...")
+        )
+        self._rootkit_row = self._create_deep_scan_action_row(
+            _("Rootkit Detection"), _("Checking availability...")
+        )
+        self._deep_scan_group.add(self._lynis_row)
+        self._deep_scan_group.add(self._rootkit_row)
+
+        self._lynis_button = None
+        self._rootkit_button = None
+        self._lynis_spinner = None
+        self._rootkit_spinner = None
+
     def _setup_deep_scan_row(
         self,
         row: Adw.ActionRow,
         installed: bool,
         tool_name: str,
         description: str,
+        info_url: str,
         install_command: str,
         on_run_clicked,
     ):
         """Configure a deep scan row based on whether the tool is installed."""
-        # Remove any existing suffix widgets (from previous setup)
-        # ActionRow doesn't expose suffixes, so we rebuild the row content
         row.set_subtitle(description)
+        suffix_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        suffix_box.set_valign(Gtk.Align.CENTER)
+
+        info_button = Gtk.Button()
+        info_button.set_icon_name(resolve_icon_name("help-about-symbolic"))
+        info_button.set_tooltip_text(_("Learn more"))
+        info_button.add_css_class("flat")
+        info_button.add_css_class("dim-label")
+        info_button.connect("clicked", self._on_info_clicked, info_url)
+        suffix_box.append(info_button)
 
         if installed:
-            # Show Run button + spinner
-            button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            button_box.set_valign(Gtk.Align.CENTER)
-
             spinner = Gtk.Spinner()
             spinner.set_visible(False)
-            button_box.append(spinner)
+            suffix_box.append(spinner)
 
             button = Gtk.Button()
             button.set_label(_("Run"))
             button.add_css_class("suggested-action")
             button.connect("clicked", on_run_clicked)
-            button_box.append(button)
+            suffix_box.append(button)
 
-            safe_add_suffix(row, button_box)
+            safe_add_suffix(row, suffix_box)
 
             # Store references for spinner/button control
             if tool_name == "lynis":
@@ -305,11 +347,13 @@ class AuditView(Gtk.Box):
 
             not_installed_icon = self._create_status_image(AuditStatus.UNKNOWN)
             not_installed_icon.set_valign(Gtk.Align.CENTER)
-            safe_add_suffix(row, not_installed_icon)
+            suffix_box.append(not_installed_icon)
+            safe_add_suffix(row, suffix_box)
 
             # Add install command row to the group
             cmd_row = self._create_command_row(install_command)
             self._deep_scan_group.add(cmd_row)
+            self._deep_scan_install_rows[tool_name] = cmd_row
 
             # Disable button references
             if tool_name == "lynis":
@@ -384,6 +428,10 @@ class AuditView(Gtk.Box):
         if self._destroyed:
             return False
 
+        # Rebuild rows so repeated refreshes do not accumulate suffixes or
+        # duplicate install command entries.
+        self._reset_deep_scan_rows()
+
         # Determine install command based on package manager
         if is_binary_installed("apt"):
             lynis_cmd = "sudo apt install lynis"
@@ -400,6 +448,7 @@ class AuditView(Gtk.Box):
             lynis_installed,
             "lynis",
             _("Comprehensive system hardening analysis with scoring"),
+            _DEEP_SCAN_INFO_URLS["lynis"],
             lynis_cmd,
             self._on_run_lynis,
         )
@@ -408,6 +457,7 @@ class AuditView(Gtk.Box):
             chkrootkit_installed,
             "chkrootkit",
             _("Scan for known rootkits using chkrootkit"),
+            _DEEP_SCAN_INFO_URLS["chkrootkit"],
             chkrootkit_cmd,
             self._on_run_rootkit,
         )
@@ -446,7 +496,7 @@ class AuditView(Gtk.Box):
             return False
 
         key = result.category.value
-        group = self._section_groups.get(key)
+        group = self._get_section_container(key)
         if group is None:
             return False
 
@@ -618,27 +668,51 @@ class AuditView(Gtk.Box):
         else:
             icon.add_css_class("dim-label")
 
+    def _get_section_container(self, key: str):
+        """Return the UI container used for a section key.
+
+        Supports both the current `_section_groups` attribute and the legacy
+        `_section_expanders` test fixture naming.
+        """
+        groups = getattr(self, "_section_groups", {}) or {}
+        if key in groups:
+            return groups[key]
+
+        expanders = getattr(self, "_section_expanders", {}) or {}
+        if key in expanders:
+            return expanders[key]
+
+        return None
+
+    def _iter_section_containers(self):
+        """Iterate over known section containers keyed by category."""
+        containers = {}
+        groups = getattr(self, "_section_groups", {}) or {}
+        expanders = getattr(self, "_section_expanders", {}) or {}
+        containers.update(groups)
+        containers.update(expanders)
+        return containers.items()
+
     def _update_summary_banner(self, report: AuditReport):
         """Update the summary banner with aggregate results."""
         summary = report.summary
         passed = summary.get(AuditStatus.PASS, 0)
         warnings = summary.get(AuditStatus.WARNING, 0)
         failed = summary.get(AuditStatus.FAIL, 0)
-        unknown = summary.get(AuditStatus.UNKNOWN, 0)
 
-        parts = []
-        if passed:
-            parts.append(_("{count} passed").format(count=passed))
-        if warnings:
-            parts.append(_("{count} warnings").format(count=warnings))
         if failed:
-            parts.append(_("{count} issues").format(count=failed))
-        if unknown:
-            parts.append(_("{count} unknown").format(count=unknown))
+            title = _("{count} security issues need attention").format(count=failed)
+        elif warnings:
+            title = _("{count} checks need review").format(count=warnings)
+            if passed:
+                title = _("{review} · {passed} passed").format(
+                    review=title, passed=passed
+                )
+        else:
+            title = _("Audit complete")
 
-        if parts:
-            self._summary_banner.set_title(", ".join(parts))
-            self._summary_banner.set_revealed(True)
+        self._summary_banner.set_title(title)
+        self._summary_banner.set_revealed(True)
 
     def _display_cached_report(self):
         """Display results from cached report without re-running checks."""
@@ -670,7 +744,7 @@ class AuditView(Gtk.Box):
 
     def _reset_sections_to_checking(self):
         """Reset all sections to their initial 'Checking...' state."""
-        for key, group in self._section_groups.items():
+        for key, group in self._iter_section_containers():
             # Remove all tracked rows
             for row in self._section_rows.get(key, []):
                 group.remove(row)
