@@ -520,35 +520,62 @@ class PreferencesPageMixin:
         """
         Open a folder in the system's default file manager.
 
+        In Flatpak, system paths (/etc, /usr, etc.) don't exist inside
+        the sandbox, so we use flatpak-spawn --host to both check existence
+        and launch xdg-open on the host.
+
         Args:
             folder_path: The folder path to open
         """
-        # In Flatpak, we must check the host filesystem for the folder's existence
-        from ..core.clamav_detection import config_file_exists
+        from ...core.flatpak import is_flatpak
 
-        # config_file_exists uses flatpak-spawn --host to check existence
-        # We use it here to verify the folder exists on the host
-        if not config_file_exists(folder_path):
-            # Show error if folder doesn't exist
-            self._show_simple_dialog(
-                _("Folder Not Found"),
-                _("The folder '{path}' does not exist.").format(path=folder_path),
-            )
-            return
-
-        try:
-            # Use xdg-open on Linux to open folder in default file manager
-            subprocess.Popen(
-                ["xdg-open", folder_path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception as e:
-            # Show error dialog if opening fails
-            self._show_simple_dialog(
-                _("Error Opening Folder"),
-                _("Could not open folder: {error}").format(error=str(e)),
-            )
+        if is_flatpak():
+            try:
+                # Check if directory exists on the host (test -d for directories)
+                check = subprocess.run(
+                    ["flatpak-spawn", "--host", "test", "-d", folder_path],
+                    capture_output=True,
+                    timeout=5,
+                )
+                if check.returncode != 0:
+                    self._show_simple_dialog(
+                        _("Folder Not Found"),
+                        _("The folder '{path}' does not exist.").format(
+                            path=folder_path
+                        ),
+                    )
+                    return
+                # Open on the host filesystem
+                subprocess.Popen(
+                    ["flatpak-spawn", "--host", "xdg-open", folder_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as e:
+                self._show_simple_dialog(
+                    _("Error Opening Folder"),
+                    _("Could not open folder: {error}").format(error=str(e)),
+                )
+        else:
+            if not os.path.isdir(folder_path):
+                self._show_simple_dialog(
+                    _("Folder Not Found"),
+                    _("The folder '{path}' does not exist.").format(
+                        path=folder_path
+                    ),
+                )
+                return
+            try:
+                subprocess.Popen(
+                    ["xdg-open", folder_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as e:
+                self._show_simple_dialog(
+                    _("Error Opening Folder"),
+                    _("Could not open folder: {error}").format(error=str(e)),
+                )
 
     def _show_simple_dialog(self, title: str, message: str):
         """

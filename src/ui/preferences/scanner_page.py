@@ -197,11 +197,19 @@ class ScannerPage(PreferencesPageMixin):
                 toast = Adw.Toast.new(_("Selected: {path}").format(path=display_path))
                 parent_window.add_toast(toast)
 
+        # In Flatpak, /etc doesn't exist inside the sandbox.
+        # The file chooser portal presents the host filesystem, but
+        # only if we don't point it at a non-existent sandbox path.
+        # Use /etc if it exists (native), otherwise let the portal decide.
+        initial_path = "/etc"
+        if is_flatpak() or not Path(initial_path).is_dir():
+            initial_path = None
+
         if _HAS_FILE_DIALOG:
             dialog = Gtk.FileDialog()
             dialog.set_title(_("Select Configuration File"))
-            initial_folder = Gio.File.new_for_path("/etc")
-            dialog.set_initial_folder(initial_folder)
+            if initial_path:
+                dialog.set_initial_folder(Gio.File.new_for_path(initial_path))
             filters = Gio.ListStore.new(Gtk.FileFilter)
             filters.append(conf_filter)
             dialog.set_filters(filters)

@@ -777,12 +777,23 @@ class AuditView(Gtk.Box):
         self._run_audit()
 
     def _on_launch_clicked(self, button: Gtk.Button, command: str):
-        """Launch an application (e.g., firewall GUI) in the background."""
+        """Launch an application (e.g., firewall GUI) in the background.
+
+        In Flatpak, GUI apps like gufw or firewall-config are on the host,
+        so we use flatpak-spawn --host to launch them.
+        """
         import subprocess
 
+        from ..core.flatpak import is_flatpak
+
         try:
+            cmd = (
+                ["flatpak-spawn", "--host", command]
+                if is_flatpak()
+                else [command]
+            )
             subprocess.Popen(
-                [command],
+                cmd,
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
