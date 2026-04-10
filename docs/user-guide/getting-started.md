@@ -82,72 +82,62 @@ See [Database Update Settings](settings.md#database-update-settings) to enable a
 ClamUI uses a clean, modern interface that follows GNOME design guidelines. Here's what you'll see when you open the
 application:
 
-![Main Window](../screenshots/main_view.png)
-
 **Header Bar (Top)**
 
-The header bar contains your main navigation and controls:
+The header bar contains quick actions and controls:
 
-- **ClamUI Title**: Shows the application name
-- **Navigation Buttons** (left side): Six icon buttons to switch between views:
-    - 📁 **Scan Files**: Main scanning interface (default view)
-    - ☁️ **Update Database**: Update virus definitions
-    - 📄 **View Logs**: Browse scan history
-    - ⚙️ **ClamAV Components**: Check ClamAV installation status
-    - 🛡️ **Quarantine**: Manage isolated threats
-    - 📊 **Statistics**: View protection statistics and scan activity
+- **Scan File / Scan System** buttons for quick one-click scanning
 - **Menu Button** (right side): Access Preferences, About, and Quit
+
+**Navigation Sidebar (Left)**
+
+ClamUI uses a GNOME Settings-style sidebar for navigation between seven views:
+
+- **Scan Files**: Main scanning interface (default view)
+- **Update Database**: Update virus definitions
+- **View Logs**: Browse scan history
+- **ClamAV Components**: Check ClamAV installation status
+- **Quarantine**: Manage isolated threats
+- **Statistics**: View protection statistics and scan activity
+- **Security Audit**: System security posture assessment
+
+On narrow windows, the sidebar collapses and a back button appears in the header bar.
 
 **Content Area (Center)**
 
-The main content area displays the currently selected view. Each view has its own purpose:
-
-- **Scan View**: Select files/folders to scan, configure scan options, and view results
-- **Update View**: Check database status and update virus definitions
-- **Logs View**: Review past scan results and filter by date/status
-- **Components View**: Verify ClamAV installation and component versions
-- **Quarantine View**: Manage files that have been isolated due to threats
-- **Statistics View**: See charts and metrics about your scanning activity
-
-**Status Information**
-
-At the bottom of most views, you'll find:
-
-- ClamAV version information
-- Database status (last updated date and number of signatures)
-- Quick status indicators
+The main content area displays the currently selected view.
 
 ### Navigating Between Views
 
 Switching between different parts of ClamUI is simple and intuitive.
 
-**Using the Navigation Buttons**
+**Using the Navigation Sidebar**
 
-The six buttons in the header bar let you quickly jump to any view:
+The sidebar on the left lets you quickly jump to any view:
 
-1. Click any navigation button to switch to that view
-2. The active view's button will be highlighted (pressed in)
+1. Click any sidebar item to switch to that view
+2. The active view is highlighted in the sidebar
 3. The content area updates immediately to show the selected view
 
 **Keyboard Shortcuts**
 
 ClamUI supports keyboard shortcuts for faster navigation:
 
-| Shortcut | Action                                                    |
-|----------|-----------------------------------------------------------|
-| `Ctrl+1` | Switch to Scan View                                       |
-| `Ctrl+2` | Switch to Update View                                     |
-| `Ctrl+3` | Switch to Logs View                                       |
-| `Ctrl+4` | Switch to Components View                                 |
-| `Ctrl+5` | Switch to Quarantine View                                 |
-| `Ctrl+6` | Switch to Statistics View                                 |
-| `F5`     | Start Scan (switches to scan view if needed)              |
-| `F6`     | Start Database Update (switches to update view if needed) |
-| `Ctrl+Q` | Quit ClamUI                                               |
-| `Ctrl+,` | Open Preferences                                          |
-| `F10`    | Open Menu                                                 |
+| Shortcut | Action                    |
+|----------|---------------------------|
+| `Ctrl+1` | Switch to Scan View       |
+| `Ctrl+2` | Switch to Update View     |
+| `Ctrl+3` | Switch to Logs View       |
+| `Ctrl+4` | Switch to Components View |
+| `Ctrl+5` | Switch to Quarantine View |
+| `Ctrl+6` | Switch to Statistics View |
+| `Ctrl+7` | Switch to Audit View      |
+| `Ctrl+S` | Start Scan                |
+| `Ctrl+U` | Start Database Update     |
+| `Ctrl+Q` | Quit ClamUI              |
+| `Ctrl+,` | Open Preferences          |
 
-💡 **Tip**: Keyboard shortcuts work from any view and will automatically switch to the relevant view if needed.
+Shortcuts work from any view and automatically switch to the relevant view.
 
 **View-Specific Navigation**
 
@@ -155,11 +145,11 @@ Some views have additional navigation within them:
 
 - **Scan View**: Switch between "Quick Actions" using scan profiles
 - **Logs View**: Filter and search through scan history
-- **Statistics View**: Change timeframe filters (7 days, 30 days, all time)
+- **Statistics View**: Change timeframe filters (Day, Week, Month, All Time)
 
 **Returning to the Scan View**
 
-Click the folder icon (📁) button in the header bar at any time to return to the main scanning interface.
+Click the "Scan Files" item in the sidebar or press `Ctrl+1` to return to the main scanning interface.
 
 ### Your First Scan
 
@@ -277,8 +267,6 @@ When the scan finishes:
 
 After your scan completes, ClamUI displays clear, easy-to-understand results. Let's break down what you'll see:
 
-![Scan Results Example](../screenshots/main_view_with_scan_result.png)
-
 **Clean Scan (No Threats Found)**
 
 If your files are clean, you'll see:
@@ -349,7 +337,7 @@ Here's your action plan:
 
 Not sure if ClamUI is working correctly? Use the built-in test feature:
 
-1. Click the **Test (EICAR)** button next to the Scan button
+1. Click the **EICAR Test** button next to the Scan button
 2. ClamUI creates a harmless test file that all antivirus software recognizes
 3. The scan runs automatically and should find the test "threat"
 4. You'll see a detection for "Eicar-Signature" or similar

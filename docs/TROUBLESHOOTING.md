@@ -239,27 +239,29 @@ ClamUI automatically manages a Flatpak-specific database directory at
 
 **Symptom:** System tray icon doesn't show even when enabled in settings.
 
-**Cause:** Missing tray indicator library or unsupported desktop environment.
+**Cause:** Desktop environment does not support the StatusNotifierItem (SNI) D-Bus protocol, or missing tray extension.
 
 **Solution:**
 
-1. Install the required library:
+1. ClamUI uses GIO D-Bus to implement the SNI protocol (no external tray library required for the icon itself).
+
+2. For context menus, install libdbusmenu:
 
    ```bash
    # Ubuntu/Debian
-   sudo apt install gir1.2-ayatanaappindicator3-0.1
+   sudo apt install gir1.2-dbusmenu-0.4
 
    # Fedora
-   sudo dnf install libayatana-appindicator-gtk3
+   sudo dnf install libdbusmenu
 
    # Arch Linux
-   sudo pacman -S libayatana-appindicator
+   sudo pacman -S libdbusmenu-glib
    ```
 
-2. For GNOME, install a tray extension:
+3. For GNOME, install a tray extension:
     - [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/)
 
-3. Restart ClamUI.
+4. Restart ClamUI.
 
 ### Tray Menu Not Working
 

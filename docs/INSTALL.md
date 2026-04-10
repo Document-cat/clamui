@@ -144,13 +144,17 @@ Use `--run` or `--user --install` the same way as above. This is useful for test
 
 ClamUI requests the following permissions:
 
-| Permission                            | Purpose                                                       |
-|---------------------------------------|---------------------------------------------------------------|
-| `--filesystem=host`                   | Full filesystem access for scanning and quarantine operations |
-| `--talk-name=org.freedesktop.Flatpak` | Execute host systemctl for scheduled scan timers              |
-| `--socket=session-bus`                | Desktop notifications for scan completion                     |
-| `--socket=wayland`                    | Native Wayland display support                                |
-| `--socket=fallback-x11`               | X11 compatibility                                             |
+| Permission | Purpose |
+|---|---|
+| `--filesystem=host` | Full filesystem access for scanning and quarantine |
+| `--share=network` | Virus database updates |
+| `--share=ipc`, `--device=dri` | Shared memory and GPU for rendering |
+| `--socket=wayland`, `--socket=fallback-x11` | Display support |
+| `--talk-name=org.freedesktop.Flatpak` | Host systemctl for scheduled scan timers |
+| `--talk-name=org.freedesktop.Notifications` | Desktop notifications |
+| `--talk-name=org.freedesktop.secrets` | Secure API key storage (keyring) |
+| `--talk-name=org.kde.StatusNotifierWatcher` etc. | System tray (SNI protocol) |
+| `--filesystem=xdg-run/gvfsd` | File browser integration |
 
 ### Managing Permissions
 
@@ -394,30 +398,29 @@ ClamUI provides an optional system tray icon for quick access to scanning functi
 
 ### Requirements
 
-The system tray feature requires the AyatanaAppIndicator3 library:
+ClamUI uses the StatusNotifierItem (SNI) D-Bus protocol for system tray integration. For context menus, `libdbusmenu` is needed:
 
 ```bash
 # Ubuntu/Debian
-sudo apt install gir1.2-ayatanaappindicator3-0.1
+sudo apt install gir1.2-dbusmenu-0.4
 
 # Fedora
-sudo dnf install libayatana-appindicator-gtk3
+sudo dnf install libdbusmenu
 
 # Arch Linux
-sudo pacman -S libayatana-appindicator
+sudo pacman -S libdbusmenu-glib
 ```
 
 ### GNOME Shell Users
 
-GNOME Shell requires an additional extension for tray icon support:
+GNOME Shell requires an extension for tray icon support:
 
 1. Install the [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension
 2. Enable the extension in GNOME Extensions app
 
 ### Graceful Degradation
 
-If the AppIndicator library is not installed, ClamUI runs normally without the tray icon feature. The application logs a
-warning but continues to function with all other features.
+If libdbusmenu is not installed, the tray icon still appears but without a context menu. If the desktop environment does not support SNI, ClamUI runs normally without the tray icon.
 
 > **Troubleshooting**: If the system tray icon is not appearing or not working correctly,
 > see [System Tray Icon Issues](./TROUBLESHOOTING.md#system-tray-icon-issues) in the troubleshooting guide.

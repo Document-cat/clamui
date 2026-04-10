@@ -76,11 +76,12 @@ For raw JSON keys, defaults, and deployment-style examples, see `docs/CONFIGURAT
 
 #### Behavior (auto-saved)
 
-| Option                                   | Simple explanation                                                                   |
-|------------------------------------------|--------------------------------------------------------------------------------------|
-| **When closing window**                  | Choose whether closing ClamUI minimizes to tray, quits, or asks every time.          |
-| **Show Live Scan Progress**              | Shows each file being scanned in real time. Turn off for a quieter progress display. |
-| **Configure Integration** (Flatpak only) | Installs/manages right-click "Scan with ClamUI" actions in supported file managers.  |
+| Option                                   | Simple explanation                                                                          |
+|------------------------------------------|---------------------------------------------------------------------------------------------|
+| **Language**                             | Override the display language (auto uses system locale). Requires restart.                   |
+| **When closing window**                  | Choose whether closing ClamUI minimizes to tray, quits, or asks every time.                 |
+| **Show Live Scan Progress**              | Shows each file being scanned in real time. Turn off for a quieter progress display.        |
+| **Configure Integration** (Flatpak only) | Installs/manages right-click "Scan with ClamUI" actions in supported file managers.         |
 
 #### Exclusions (auto-saved)
 
@@ -180,17 +181,26 @@ For raw JSON keys, defaults, and deployment-style examples, see `docs/CONFIGURAT
 | **Clear Logs**       | Deletes log files to free disk space.                                       |
 | **Copy System Info** | Copies OS/runtime details for bug reports.                                  |
 
-#### Advanced JSON-Only Settings (not currently direct toggles in Preferences)
+#### Advanced JSON-Only Settings (not exposed in Preferences UI)
 
 These are in `~/.config/clamui/settings.json`:
 
-- `notifications_enabled`: Desktop notifications on/off.
-- `minimize_to_tray`: Minimize window into tray instead of taskbar.
-- `start_minimized`: Start hidden/minimized at launch (when tray is available).
-- `quarantine_directory`: Override default quarantine folder.
-- `daemon_socket_path`: Custom daemon socket path (advanced/manual use).
-- `debug_log_max_size_mb`: Max size per debug log file.
-- `debug_log_max_files`: Number of rotated debug log files to keep.
+- `notifications_enabled` (default: `true`): Desktop notifications on/off.
+- `minimize_to_tray` (default: `false`): Minimize window into tray instead of taskbar.
+- `start_minimized` (default: `false`): Start hidden/minimized at launch (when tray is available).
+- `quarantine_directory` (default: `""`): Override default quarantine folder.
+- `daemon_socket_path` (default: `""`): Custom daemon socket path.
+- `clamd_conf_path` (default: `""`): Custom path to `clamd.conf`.
+- `freshclam_conf_path` (default: `""`): Custom path to `freshclam.conf`.
+- `debug_log_max_size_mb` (default: `10`): Max size per debug log file.
+- `debug_log_max_files` (default: `5`): Number of rotated debug log files to keep.
+- `device_auto_scan_enabled` (default: `false`): Auto-scan newly connected storage devices.
+- `device_auto_scan_types` (default: `["removable", "external"]`): Device types to auto-scan.
+- `device_auto_scan_notify` (default: `true`): Notification on device scan start/complete.
+- `device_auto_scan_max_size_gb` (default: `32`): Skip devices larger than this.
+- `device_auto_scan_delay_seconds` (default: `3`): Wait before scanning after mount.
+- `device_auto_scan_auto_quarantine` (default: `false`): Auto-quarantine threats on device scans.
+- `device_auto_scan_skip_on_battery` (default: `true`): Skip device scans on battery power.
 
 ---
 

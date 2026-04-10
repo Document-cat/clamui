@@ -126,6 +126,6 @@ git push origin :refs/tags/v0.2.0-test
 | Push to `master` | No signing (build only) |
 | Pull request     | No signing (build only) |
 | Tag push (`v*`)  | **Signed**              |
-| Manual dispatch  | No signing (build only) |
+| Manual dispatch  | Optional (via `sign` input) |
 
-This ensures that only official releases are signed, while development builds remain unsigned for faster iteration.
+Tag pushes are always signed. Manual dispatches can optionally sign by setting the `sign` input to `true`.

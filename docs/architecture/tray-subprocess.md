@@ -301,7 +301,7 @@ sequenceDiagram
     App->>TrayMgr: stop()
     TrayMgr->>Pipe: {"action": "quit"}
     Pipe->>TrayService: command
-    TrayService->>TrayService: Gtk.main_quit()
+    TrayService->>TrayService: GLib.MainLoop.quit()
     deactivate TrayService
     TrayMgr->>TrayMgr: Wait up to 2s for exit
     TrayMgr->>TrayMgr: Cleanup pipes and threads
@@ -404,8 +404,9 @@ Sent via **stdout** from the subprocess:
 1. **ClamUIApp** creates **TrayManager** instance
 2. **TrayManager.start()** spawns subprocess:
    ```python
+   service_path = self._get_service_path()  # Resolves full path to tray_service.py
    self._process = subprocess.Popen(
-       [sys.executable, "tray_service.py"],
+       [sys.executable, service_path],
        stdin=PIPE, stdout=PIPE, stderr=PIPE, text=True
    )
    ```

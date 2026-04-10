@@ -611,7 +611,7 @@ When a background scan completes, ClamUI notifies you:
 - Tray icon returns to normal status
 - Check Scan History to view results
 
-💡 **Tip:** Enable notifications (Settings > Notification Settings) to be alerted when background scans complete.
+💡 **Tip:** Enable notifications via `notifications_enabled` in `~/.config/clamui/settings.json` to be alerted when background scans complete.
 
 #### Background Scan Behavior
 

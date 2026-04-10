@@ -131,7 +131,7 @@ These error banners can be dismissed by clicking the "×" button or automaticall
 ### Testing with the EICAR Test File
 
 The **EICAR test file** is a special tool for verifying that antivirus software is working correctly. ClamUI includes a
-convenient "Test (EICAR)" button for instant testing.
+convenient "EICAR Test" button for instant testing.
 
 #### What is EICAR?
 
@@ -165,7 +165,7 @@ ClamUI makes EICAR testing simple with a dedicated test button:
 **Step-by-Step**:
 
 1. **Find the Test button**: Located next to the main Scan button in the scan view
-2. **Click "Test (EICAR)"**: The button is styled with a beaker icon (🧪)
+2. **Click "EICAR Test"**: The button is next to the main Scan button
 3. **Automatic test file creation**: ClamUI creates a temporary EICAR file
 4. **Scan starts immediately**: No need to select a path
 5. **Wait for results**: Scanning completes in 1-2 seconds
@@ -340,8 +340,7 @@ How long a scan takes depends on several factors:
 - Current file being scanned
 - Estimated time remaining
 
-**Why there's no progress bar**: ClamAV doesn't report real-time progress when scanning. ClamUI only receives results
-when the scan completes.
+**Progress indication**: ClamUI shows a progress bar that pulses during scanning. When the daemon backend or file count estimates are available, it displays a percentage (e.g., "Scanning... 42%"). The current file being scanned is shown in real time.
 
 **What you can do during scanning**:
 

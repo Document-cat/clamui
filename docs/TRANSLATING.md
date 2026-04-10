@@ -134,14 +134,24 @@ This merges new strings into your PO file, marks removed strings as obsolete, an
 | `po/LINGUAS` | List of available language codes |
 | `po/<LANG>.po` | Translation file for a specific language |
 | `scripts/update-pot.sh` | Script to regenerate the POT template from source |
-| `src/core/i18n.py` | Runtime i18n module (`_`, `N_`, `ngettext`, `pgettext`) |
+| `scripts/check-potfiles.sh` | Verify POTFILES.in lists all files with translatable strings |
+| `scripts/check-translations.sh` | Validate PO files for completeness and errors |
+| `src/core/i18n.py` | Runtime i18n module (`_`, `N_`, `ngettext`, `pgettext`, `apply_language_override`, `get_available_languages`) |
+
+## In-App Language Override
+
+Users can override the system locale from **Preferences > Behavior > Language**. This sets the `language` key in `settings.json` to an ISO code (e.g., `"de"`, `"zh_CN"`) or `"auto"` for system default. The change requires restarting ClamUI.
+
+The tray subprocess has its own i18n bootstrap path (uses `gettext` directly) to stay independent of GTK.
 
 ## For Developers
 
 If you are adding new translatable strings to the source code, see the [i18n section in CLAUDE.md](../CLAUDE.md) for the string-marking conventions (`_()`, `N_()`, `ngettext()`, format string rules). After adding strings:
 
 ```bash
-./scripts/update-pot.sh
+./scripts/update-pot.sh          # Regenerate POT template
+./scripts/check-potfiles.sh      # Verify all source files are listed
+./scripts/check-translations.sh  # Validate PO files
 ```
 
-This regenerates `po/clamui.pot`. Existing PO files can then be updated with `msgmerge` as described above.
+Existing PO files can then be updated with `msgmerge` as described above.

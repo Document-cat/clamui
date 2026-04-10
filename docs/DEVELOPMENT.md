@@ -34,21 +34,21 @@ sudo apt install libgirepository-2.0-dev libcairo2-dev pkg-config python3-dev
 # ClamAV antivirus (for testing scan functionality)
 sudo apt install clamav
 
-# System tray support (optional)
-sudo apt install gir1.2-ayatanaappindicator3-0.1
+# System tray support (optional, for context menu)
+sudo apt install gir1.2-dbusmenu-0.4
 ```
 
 #### Fedora
 
 ```bash
 sudo dnf install python3-gobject python3-gobject-devel gtk4 libadwaita \
-    gobject-introspection-devel cairo-gobject-devel clamav libayatana-appindicator-gtk3
+    gobject-introspection-devel cairo-gobject-devel clamav libdbusmenu
 ```
 
 #### Arch Linux
 
 ```bash
-sudo pacman -S python-gobject gtk4 libadwaita clamav libayatana-appindicator
+sudo pacman -S python-gobject gtk4 libadwaita clamav libdbusmenu-glib
 ```
 
 ### Clone the Repository
@@ -189,44 +189,21 @@ pytest --cov=src --cov-report=term-missing --cov-report=html
 
 ### Test Organization
 
-Tests are organized to mirror the source code structure:
+Tests mirror the source structure under `tests/`:
 
-```
-tests/
-├── conftest.py                 # Shared fixtures, GTK mocking
-├── core/                       # Tests for src/core/ modules
-│   ├── test_battery_manager.py
-│   ├── test_clamav_config.py
-│   ├── test_daemon_scanner.py
-│   ├── test_log_manager.py
-│   ├── test_notification_manager.py
-│   ├── test_quarantine_database.py
-│   ├── test_quarantine_manager.py
-│   ├── test_scheduler.py
-│   ├── test_settings_manager.py
-│   └── test_utils.py
-├── profiles/                   # Tests for src/profiles/ modules
-│   ├── test_models.py
-│   ├── test_profile_manager.py
-│   └── test_profile_storage.py
-├── ui/                         # Tests for src/ui/ components
-│   ├── test_fullscreen_dialog.py
-│   ├── test_logs_view.py
-│   ├── test_preferences_window.py
-│   ├── test_profile_dialogs.py
-│   ├── test_quarantine_view.py
-│   ├── test_scanner_ui.py
-│   ├── test_statistics_view.py
-│   ├── test_tray_indicator.py
-│   └── test_tray_manager.py
-├── integration/                # Integration tests
-│   ├── test_scanner_integration.py
-│   ├── test_scheduled_scan.py
-│   └── test_tray_integration.py
-└── e2e/                        # End-to-end tests
-    ├── test_profile_lifecycle.py
-    └── test_scheduled_scan_flow.py
-```
+| Directory | Tests for |
+|-----------|-----------|
+| `tests/core/` | `src/core/` business logic |
+| `tests/profiles/` | `src/profiles/` profile management |
+| `tests/ui/` | `src/ui/` GTK components |
+| `tests/ui/preferences/` | `src/ui/preferences/` pages |
+| `tests/ui/scan/` | `src/ui/scan/` modular scan view |
+| `tests/cli/` | `src/cli/` subcommands |
+| `tests/packaging/` | Debian, Flatpak, desktop integration |
+| `tests/integration/` | Cross-module integration |
+| `tests/e2e/` | End-to-end workflows |
+
+Shared fixtures and GTK mocking are in `tests/conftest.py`.
 
 ### Test Markers
 
@@ -280,36 +257,23 @@ pytest --durations=0
 ClamUI uses [Ruff](https://github.com/astral-sh/ruff) for linting and formatting:
 
 ```bash
-# Install Ruff
-pip install ruff
-
+# Ruff is included in dev dependencies (uv sync --dev)
 # Run linting
-ruff check src/ tests/
+uv run ruff check src/ tests/
 
 # Run linting with auto-fix
-ruff check --fix src/ tests/
+uv run ruff check --fix src/ tests/
 
 # Check formatting
-ruff format --check src/ tests/
+uv run ruff format --check src/ tests/
 
 # Apply formatting
-ruff format src/ tests/
+uv run ruff format src/ tests/
 ```
 
 ### Configuration
 
-Ruff is configured in `pyproject.toml` with the following rules:
-
-| Category | Rules                           |
-|----------|---------------------------------|
-| `E`, `W` | pycodestyle errors and warnings |
-| `F`      | Pyflakes                        |
-| `I`      | isort (import sorting)          |
-| `B`      | flake8-bugbear                  |
-| `C4`     | flake8-comprehensions           |
-| `UP`     | pyupgrade                       |
-| `ARG`    | flake8-unused-arguments         |
-| `SIM`    | flake8-simplify                 |
+Ruff is configured in `pyproject.toml`. See `[tool.ruff.lint]` for the full rule set, which includes pycodestyle, Pyflakes, isort, bugbear, comprehensions, pyupgrade, gettext, bandit (security), print detection, pytest-style, and Ruff-native rules.
 
 ### Pre-commit Checks
 
@@ -317,12 +281,14 @@ Before committing, run:
 
 ```bash
 # Lint and format
-ruff check --fix src/ tests/
-ruff format src/ tests/
+uv run ruff check --fix src/ tests/
+uv run ruff format src/ tests/
 
 # Run tests
 pytest
 ```
+
+A pre-commit hook (install via `./scripts/hooks/install-hooks.sh`) blocks absolute `src.*` imports which break when ClamUI is installed as a package.
 
 ---
 
@@ -430,38 +396,21 @@ class TestMyFeature:
 
 ### Key Design Patterns
 
-- **Adw.Application**: Modern GNOME application structure
+- **Adw.Application**: Modern GNOME application lifecycle with service locator pattern (`AppContext`)
 - **Async Scanning**: Background threads with `GLib.idle_add()` for thread-safe UI updates
-- **Subprocess Integration**: `clamscan` for antivirus scanning
+- **Subprocess Integration**: `clamscan`/`clamdscan` for antivirus scanning
+- **SNI Tray**: StatusNotifierItem via GIO D-Bus subprocess architecture
+- **Modular Scan UI**: Coordinator pattern decomposing scan view into target selector, profile selector, progress, and results widgets
 
-### Project Structure
+### Entry Points
 
+```toml
+clamui                    # GUI application (or CLI subcommands)
+clamui-scheduled-scan     # Scheduled scan CLI (systemd/cron)
+clamui-apply-preferences  # Privileged config applier (via pkexec)
 ```
-clamui/
-├── src/
-│   ├── main.py               # Application entry point (routes CLI vs GUI)
-│   ├── app.py                # Adw.Application class
-│   ├── cli/                  # CLI subcommands (scan, quarantine, profile, status, history)
-│   │   ├── router.py         # Subcommand dispatcher
-│   │   ├── scan_cmd.py       # Headless scan with --profile, --quarantine, --json
-│   │   ├── quarantine_cmd.py # Quarantine list/restore/delete
-│   │   ├── profile_cmd.py    # Profile list/show/export/import
-│   │   ├── status_cmd.py     # ClamAV status and statistics
-│   │   ├── history_cmd.py    # Scan history viewer
-│   │   ├── help_cmd.py       # Detailed help and examples
-│   │   └── output.py         # Shared formatting utilities
-│   ├── core/                 # Business logic modules
-│   ├── profiles/             # Scan profile management
-│   └── ui/                   # GTK4/Adwaita UI components
-│       └── scan/             # Modular scan view (coordinator pattern)
-├── tests/                    # Test suite (mirrors src structure)
-├── docs/                     # Documentation
-├── debian/                   # Debian packaging
-├── .github/workflows/        # CI workflows
-└── pyproject.toml            # Project configuration
 
-For a detailed breakdown of all modules, see the [Project Structure](../README.md#project-structure) section in the
-README.
+For a detailed breakdown of all modules, see the [Repository Structure](../CLAUDE.md#repository-structure) section in CLAUDE.md.
 
 ---
 
@@ -469,16 +418,22 @@ README.
 
 ClamUI uses GitHub Actions for CI with the following workflows:
 
-| Workflow            | Trigger         | Purpose                              |
-|---------------------|-----------------|--------------------------------------|
-| `test.yml`          | Push/PR to main | Run tests on Python 3.11, 3.12, 3.13 |
-| `lint.yml`          | Push/PR to main | Run Ruff linting and format checks   |
-| `build-deb.yml`     | Manual/Release  | Build Debian packages                |
-| `build-flatpak.yml` | Manual/Release  | Build Flatpak packages               |
+| Workflow               | Trigger         | Purpose                              |
+|------------------------|-----------------|--------------------------------------|
+| `test.yml`             | Push/PR to main | Run tests on Python 3.11, 3.12, 3.13 |
+| `lint.yml`             | Push/PR to main | Ruff linting and format checks       |
+| `build-deb.yml`        | Manual/Release  | Build Debian packages                |
+| `build-flatpak.yml`    | Manual/Release  | Build Flatpak packages               |
+| `build-appimage.yml`   | Push/Tag/PR     | Build AppImage                       |
+| `build-all.yml`        | Manual/Release  | Orchestrate all package builds       |
+| `codeql.yml`           | Push/PR/Schedule| CodeQL security analysis             |
+| `dependency-audit.yml` | Schedule        | Dependency vulnerability audit       |
+| `dependency-review.yml`| PR              | Review new dependency changes        |
+| `i18n.yml`             | Push/PR         | Translation validation               |
 
 ### CI Environment
 
-- **Runner**: Ubuntu 22.04
+- **Runner**: Ubuntu 24.04 (test matrix), Ubuntu 22.04 (import compatibility check)
 - **Display**: xvfb for headless GTK testing
 - **Coverage**: Uploaded as artifact on Python 3.12
 
@@ -488,7 +443,5 @@ ClamUI uses GitHub Actions for CI with the following workflows:
 
 - [README.md](../README.md) - Project overview and quick start
 - [CONFIGURATION.md](./CONFIGURATION.md) - Configuration reference and settings guide
-- [docs/INSTALL.md](./INSTALL.md) - Installation guide
+- [INSTALL.md](./INSTALL.md) - Installation guide
 - [TRANSLATING.md](./TRANSLATING.md) - Translation contributing guide
-- [DEBIAN_PACKAGING.md](../DEBIAN_PACKAGING.md) - Debian packaging details
-- [FLATPAK_SUBMISSION.md](../FLATPAK_SUBMISSION.md) - Flathub submission documentation
