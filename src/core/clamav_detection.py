@@ -194,21 +194,51 @@ def check_clamdscan_installed() -> tuple[bool, str | None]:
         return (False, _("Error checking clamdscan: {error}").format(error=str(e)))
 
 
-def get_clamd_socket_path() -> str | None:
+def _get_configured_clamd_socket_path(config_path: str | None) -> str | None:
+    """Read LocalSocket from clamd.conf when an explicit config path is known."""
+    if not config_path:
+        return None
+
+    try:
+        from .clamav_config import parse_config
+
+        config, error = parse_config(config_path)
+        if config is None:
+            if error:
+                logger.debug("Failed to parse clamd config %s: %s", config_path, error)
+            return None
+
+        socket_path = config.get_value("LocalSocket")
+        if socket_path:
+            return socket_path.strip()
+    except Exception as e:
+        logger.debug("Failed to read LocalSocket from %s: %s", config_path, e)
+
+    return None
+
+
+def get_clamd_socket_path(config_path: str | None = None) -> str | None:
     """
     Get the clamd socket path by checking common locations.
 
     Checks the following paths in order:
+    - LocalSocket from the provided clamd.conf, if available
     - /var/run/clamav/clamd.ctl (Ubuntu/Debian default)
     - /run/clamav/clamd.ctl (alternative location)
+    - /run/clamd.scan/clamd.sock (Fedora/RHEL)
     - /var/run/clamd.scan/clamd.sock (Fedora)
 
     Returns:
         Socket path if found, None otherwise
     """
+    configured_socket = _get_configured_clamd_socket_path(config_path)
+    if configured_socket and os.path.exists(configured_socket):
+        return configured_socket
+
     socket_paths = [
         "/var/run/clamav/clamd.ctl",
         "/run/clamav/clamd.ctl",
+        "/run/clamd.scan/clamd.sock",
         "/var/run/clamd.scan/clamd.sock",
     ]
 
@@ -219,7 +249,10 @@ def get_clamd_socket_path() -> str | None:
     return None
 
 
-def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | None]:
+def check_clamd_connection(
+    socket_path: str | None = None,
+    config_path: str | None = None,
+) -> tuple[bool, str | None]:
     """
     Check if clamd is accessible and responding.
 
@@ -227,6 +260,8 @@ def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | 
 
     Args:
         socket_path: Optional socket path. If not provided, uses auto-detection.
+        config_path: Optional clamd.conf path. When provided, clamdscan is pointed
+            at this config so it uses the same LocalSocket or TCPSocket as the daemon.
 
     Returns:
         Tuple of (is_connected, message):
@@ -238,17 +273,30 @@ def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | 
     if not is_installed:
         return (False, error)
 
+    detected_socket = socket_path
+
     # Check socket exists (if not in Flatpak)
     if not is_flatpak():
-        detected_socket = socket_path or get_clamd_socket_path()
+        detected_socket = socket_path or get_clamd_socket_path(config_path)
         if detected_socket is None:
             return (False, _("Could not find clamd socket. Is clamav-daemon installed?"))
+
+    resolved_config_path = config_path
+    if resolved_config_path is None and detected_socket in {
+        "/run/clamd.scan/clamd.sock",
+        "/var/run/clamd.scan/clamd.sock",
+    }:
+        resolved_config_path = detect_clamd_conf_path()
 
     # Try to ping the daemon (--ping requires a timeout argument in seconds)
     # Use force_host=True because the clamd daemon runs on the HOST, not in the
     # Flatpak sandbox. The bundled clamdscan can't communicate with the host daemon.
     try:
-        cmd = wrap_host_command(["clamdscan", "--ping", "3"], force_host=True)
+        cmd = ["clamdscan"]
+        if resolved_config_path:
+            cmd.extend(["--config-file", resolved_config_path])
+        cmd.extend(["--ping", "3"])
+        cmd = wrap_host_command(cmd, force_host=True)
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=10, env=get_clean_env()
         )
@@ -258,6 +306,18 @@ def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | 
         else:
             # Check stderr and stdout for error messages
             error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            if "permission denied" in error_msg.lower():
+                if resolved_config_path:
+                    return (
+                        False,
+                        _(
+                            "Daemon socket permission denied. Check LocalSocketMode or LocalSocketGroup in {path}: {error}"
+                        ).format(path=resolved_config_path, error=error_msg),
+                    )
+                return (
+                    False,
+                    _("Daemon socket permission denied: {error}").format(error=error_msg),
+                )
             return (False, _("Daemon not responding: {error}").format(error=error_msg))
 
     except subprocess.TimeoutExpired:

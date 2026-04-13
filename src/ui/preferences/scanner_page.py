@@ -101,7 +101,13 @@ class ScannerPage(PreferencesPageMixin):
         temp_instance._parent_window = parent_window
 
         # Create scan backend settings group (ClamUI settings, auto-saved)
-        ScannerPage._create_scan_backend_group(page, widgets_dict, settings_manager, temp_instance)
+        ScannerPage._create_scan_backend_group(
+            page,
+            widgets_dict,
+            settings_manager,
+            temp_instance,
+            config_path=config_path,
+        )
 
         # Create file location group with detect/browse callbacks
         def _on_detect_clamd():
@@ -245,7 +251,11 @@ class ScannerPage(PreferencesPageMixin):
 
     @staticmethod
     def _create_scan_backend_group(
-        page: Adw.PreferencesPage, widgets_dict: dict, settings_manager, helper
+        page: Adw.PreferencesPage,
+        widgets_dict: dict,
+        settings_manager,
+        helper,
+        config_path: str | None = None,
     ):
         """
         Create the Scan Backend preferences group.
@@ -266,6 +276,7 @@ class ScannerPage(PreferencesPageMixin):
             widgets_dict: Dictionary to store widget references
             settings_manager: SettingsManager for auto-saving backend selection
             helper: Helper instance with _create_permission_indicator method
+            config_path: Resolved clamd.conf path for daemon reachability checks
         """
         group = Adw.PreferencesGroup()
         group.set_title(_("Scan Backend"))
@@ -321,7 +332,7 @@ class ScannerPage(PreferencesPageMixin):
         # Start background thread to check daemon status
         thread = threading.Thread(
             target=ScannerPage._check_daemon_status_background,
-            args=(status_row, status_icon),
+            args=(status_row, status_icon, config_path),
             daemon=True,
         )
         thread.start()
@@ -336,6 +347,7 @@ class ScannerPage(PreferencesPageMixin):
             lambda btn: ScannerPage._on_refresh_daemon_status(
                 widgets_dict["daemon_status_row"],
                 widgets_dict["daemon_status_icon"],
+                config_path,
             ),
         )
         status_row.add_suffix(refresh_button)
@@ -395,7 +407,11 @@ class ScannerPage(PreferencesPageMixin):
         ScannerPage._update_backend_subtitle(row, selected)
 
     @staticmethod
-    def _check_daemon_status_background(status_row: Adw.ActionRow, status_icon: Gtk.Image):
+    def _check_daemon_status_background(
+        status_row: Adw.ActionRow,
+        status_icon: Gtk.Image,
+        config_path: str | None = None,
+    ):
         """
         Check daemon connection status in background thread.
 
@@ -407,7 +423,7 @@ class ScannerPage(PreferencesPageMixin):
         """
         from ...core.utils import check_clamd_connection
 
-        is_connected, message = check_clamd_connection()
+        is_connected, message = check_clamd_connection(config_path=config_path)
 
         GLib.idle_add(
             ScannerPage._update_daemon_status_ui,
@@ -449,7 +465,11 @@ class ScannerPage(PreferencesPageMixin):
         return False
 
     @staticmethod
-    def _on_refresh_daemon_status(status_row: Adw.ActionRow, status_icon: Gtk.Image):
+    def _on_refresh_daemon_status(
+        status_row: Adw.ActionRow,
+        status_icon: Gtk.Image,
+        config_path: str | None = None,
+    ):
         """
         Refresh the daemon connection status asynchronously.
 
@@ -462,7 +482,7 @@ class ScannerPage(PreferencesPageMixin):
         """
         thread = threading.Thread(
             target=ScannerPage._check_daemon_status_background,
-            args=(status_row, status_icon),
+            args=(status_row, status_icon, config_path),
             daemon=True,
         )
         thread.start()

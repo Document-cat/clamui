@@ -849,35 +849,53 @@ class TestLogManagerDaemonStatus:
     def test_get_daemon_status_not_installed(self, log_manager):
         """Test daemon status when clamd is not installed."""
         with mock.patch("src.core.log_manager.which_host_command", return_value=None):
-            status, message = log_manager.get_daemon_status()
-            assert status == DaemonStatus.NOT_INSTALLED
-            assert "not installed" in message.lower()
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    mock.Mock(stdout="unknown\n"),
+                    mock.Mock(stdout="unknown\n"),
+                    mock.Mock(stdout="unknown\n"),
+                    mock.Mock(returncode=1),
+                ]
+                status, message = log_manager.get_daemon_status()
+                assert status == DaemonStatus.NOT_INSTALLED
+                assert "not installed" in message.lower()
 
     def test_get_daemon_status_running(self, log_manager):
-        """Test daemon status when clamd is running."""
+        """Test daemon status when a supported service is active."""
         with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
             with mock.patch("subprocess.run") as mock_run:
-                mock_run.return_value = mock.Mock(returncode=0)
+                mock_run.return_value = mock.Mock(stdout="active\n")
+                status, message = log_manager.get_daemon_status()
+                assert status == DaemonStatus.RUNNING
+                assert "active" in message.lower()
+
+    def test_get_daemon_status_stopped(self, log_manager):
+        """Test daemon status when clamd service is installed but not active."""
+        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    mock.Mock(stdout="failed\n"),
+                    mock.Mock(stdout="unknown\n"),
+                    mock.Mock(stdout="unknown\n"),
+                    mock.Mock(returncode=1),
+                ]
+                status, message = log_manager.get_daemon_status()
+                assert status == DaemonStatus.STOPPED
+                assert "not active" in message.lower()
+
+    def test_get_daemon_status_falls_back_to_process_when_systemctl_fails(self, log_manager):
+        """Test daemon status falls back to pgrep when systemctl calls fail."""
+        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    OSError("Test error"),
+                    OSError("Test error"),
+                    OSError("Test error"),
+                    mock.Mock(returncode=0),
+                ]
                 status, message = log_manager.get_daemon_status()
                 assert status == DaemonStatus.RUNNING
                 assert "running" in message.lower()
-
-    def test_get_daemon_status_stopped(self, log_manager):
-        """Test daemon status when clamd is installed but not running."""
-        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
-            with mock.patch("subprocess.run") as mock_run:
-                mock_run.return_value = mock.Mock(returncode=1)
-                status, message = log_manager.get_daemon_status()
-                assert status == DaemonStatus.STOPPED
-                assert "not running" in message.lower()
-
-    def test_get_daemon_status_unknown_on_error(self, log_manager):
-        """Test daemon status returns UNKNOWN on subprocess error."""
-        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
-            with mock.patch("subprocess.run") as mock_run:
-                mock_run.side_effect = OSError("Test error")
-                status, message = log_manager.get_daemon_status()
-                assert status == DaemonStatus.UNKNOWN
 
 
 class TestLogManagerDaemonLogs:

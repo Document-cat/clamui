@@ -51,10 +51,14 @@ clamdscan --version  # Verify
 ### Fedora
 
 ```bash
-sudo dnf install clamd
+sudo dnf install clamd clamav-update
+sudo freshclam
 sudo systemctl enable clamd@scan
 sudo systemctl start clamd@scan
 ```
+
+ClamUI targets Fedora's `scan.conf` layout automatically and talks to `clamd` with `clamdscan --config-file=/etc/clamd.d/scan.conf ...`.
+If the service is running but the daemon still shows unavailable, check the socket permissions configured by `LocalSocketMode` and `LocalSocketGroup` in `/etc/clamd.d/scan.conf`.
 
 ### Arch Linux
 
@@ -78,9 +82,10 @@ ClamUI auto-detects the clamd socket by checking:
 
 - `/var/run/clamav/clamd.ctl` (Ubuntu/Debian)
 - `/run/clamav/clamd.ctl` (alternative)
-- `/var/run/clamd.scan/clamd.sock` (Fedora)
+- `/run/clamd.scan/clamd.sock` (Fedora/RHEL)
+- `/var/run/clamd.scan/clamd.sock` (legacy Fedora path)
 
-Override with `"daemon_socket_path"` in settings.json, or check `grep "LocalSocket" /etc/clamav/clamd.conf`.
+Override with `"daemon_socket_path"` in settings.json, or check `grep "LocalSocket" /etc/clamav/clamd.conf` on Debian/Ubuntu and `grep "LocalSocket" /etc/clamd.d/scan.conf` on Fedora/RHEL.
 
 ## See Also
 

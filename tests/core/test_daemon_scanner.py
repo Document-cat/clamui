@@ -75,6 +75,26 @@ class TestDaemonScannerCheckAvailable:
         assert available is False
         assert "not accessible" in msg.lower() or "connection" in msg.lower()
 
+    def test_check_available_passes_resolved_config_path(self, daemon_scanner_class):
+        """Test availability checks use the saved clamd.conf path when present."""
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = "/etc/clamd.d/scan.conf"
+        scanner = daemon_scanner_class(settings_manager=mock_settings)
+
+        with patch(
+            "src.core.daemon_scanner.resolve_clamd_conf_path", return_value="/etc/clamd.d/scan.conf"
+        ):
+            with patch(
+                "src.core.daemon_scanner.check_clamdscan_installed",
+                return_value=(True, "ClamAV 1.0.0"),
+            ):
+                with patch(
+                    "src.core.daemon_scanner.check_clamd_connection", return_value=(True, "PONG")
+                ) as mock_connection:
+                    scanner.check_available()
+
+        mock_connection.assert_called_once_with(config_path="/etc/clamd.d/scan.conf")
+
 
 class TestDaemonScannerBuildCommand:
     """Tests for DaemonScanner._build_command method."""
@@ -177,6 +197,26 @@ class TestDaemonScannerBuildCommand:
         # Exclusions are handled post-scan via _filter_excluded_threats()
         assert "--exclude" not in cmd
         assert "--exclude-dir" not in cmd
+
+    def test_build_command_uses_saved_clamd_config_path(self, tmp_path, daemon_scanner_class):
+        """Test _build_command adds --config-file for saved clamd.conf paths."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = "/etc/clamd.d/scan.conf"
+        scanner = daemon_scanner_class(settings_manager=mock_settings)
+
+        with patch(
+            "src.core.daemon_scanner.resolve_clamd_conf_path", return_value="/etc/clamd.d/scan.conf"
+        ):
+            with patch("src.core.daemon_scanner.wrap_host_command", side_effect=lambda x, **kw: x):
+                cmd = scanner._build_command(str(test_file), recursive=True)
+
+        assert cmd[0] == "clamdscan"
+        assert cmd[1:3] == ["--config-file", "/etc/clamd.d/scan.conf"]
+        assert "--multiscan" in cmd
+        assert "--fdpass" in cmd
 
 
 class TestDaemonScannerParseResults:

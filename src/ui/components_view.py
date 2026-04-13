@@ -71,7 +71,7 @@ SETUP_GUIDES = {
             ),
             (
                 "Fedora",
-                "sudo dnf install clamd\nsudo systemctl enable clamd@scan\nsudo systemctl start clamd@scan",
+                "sudo dnf install clamd clamav-update\nsudo freshclam\nsudo systemctl enable clamd@scan\nsudo systemctl start clamd@scan",
             ),
             (
                 "Arch Linux",
@@ -80,7 +80,11 @@ SETUP_GUIDES = {
         ],
         "notes": N_("clamd is the ClamAV daemon for faster scanning.")
         + " "
-        + N_("Configuration file location is auto-detected in Preferences."),
+        + N_("Configuration file location is auto-detected in Preferences.")
+        + " "
+        + N_(
+            "On Fedora, ClamUI uses /etc/clamd.d/scan.conf. If the daemon is running but still unavailable, verify socket permissions and test with: clamdscan --config-file=/etc/clamd.d/scan.conf --ping 3"
+        ),
     },
 }
 

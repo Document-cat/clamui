@@ -39,6 +39,7 @@ from .utils import (
     check_clamd_connection,
     get_clamav_path,
     get_clean_env,
+    resolve_clamd_conf_path,
     validate_path,
     wrap_host_command,
 )
@@ -176,6 +177,28 @@ class Scanner:
             )
         return self._daemon_scanner
 
+    def _get_clamd_config_path(self) -> str | None:
+        """Resolve clamd.conf when settings contain a path-like value."""
+        if self._settings_manager is None:
+            return None
+
+        try:
+            saved_path = self._settings_manager.get("clamd_conf_path", "")
+        except Exception:
+            logger.debug("Failed to read clamd_conf_path from settings", exc_info=True)
+            return None
+
+        if not isinstance(saved_path, str):
+            return None
+        if saved_path and not os.path.isabs(saved_path):
+            return None
+
+        try:
+            return resolve_clamd_conf_path(self._settings_manager)
+        except Exception:
+            logger.debug("Failed to resolve clamd config path", exc_info=True)
+            return None
+
     def _is_daemon_available_cached(self) -> bool:
         """Check daemon availability with caching (60s TTL)."""
         now = time.monotonic()
@@ -185,7 +208,7 @@ class Scanner:
         ):
             return Scanner._daemon_cache[1]
 
-        is_available, _ = check_clamd_connection()
+        is_available, _ = check_clamd_connection(config_path=self._get_clamd_config_path())
         Scanner._daemon_cache = (now, is_available)
         return is_available
 

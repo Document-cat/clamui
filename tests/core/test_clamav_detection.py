@@ -366,6 +366,30 @@ class TestGetClamdSocketPath:
             socket_path = clamav_detection.get_clamd_socket_path()
             assert socket_path == "/var/run/clamd.scan/clamd.sock"
 
+    def test_get_clamd_socket_path_fedora_run_location(self):
+        """Test get_clamd_socket_path returns Fedora /run location."""
+        with mock.patch("os.path.exists") as mock_exists:
+
+            def exists_check(path):
+                return path == "/run/clamd.scan/clamd.sock"
+
+            mock_exists.side_effect = exists_check
+            socket_path = clamav_detection.get_clamd_socket_path()
+            assert socket_path == "/run/clamd.scan/clamd.sock"
+
+    def test_get_clamd_socket_path_prefers_configured_local_socket(self):
+        """Test get_clamd_socket_path reads LocalSocket from the provided config."""
+        with mock.patch.object(
+            clamav_detection,
+            "_get_configured_clamd_socket_path",
+            return_value="/custom/clamd.sock",
+        ):
+            with mock.patch(
+                "os.path.exists", side_effect=lambda path: path == "/custom/clamd.sock"
+            ):
+                socket_path = clamav_detection.get_clamd_socket_path("/etc/clamd.d/scan.conf")
+                assert socket_path == "/custom/clamd.sock"
+
     def test_get_clamd_socket_path_not_found(self):
         """Test get_clamd_socket_path returns None when socket not found."""
         with mock.patch("os.path.exists", return_value=False):
@@ -588,6 +612,88 @@ class TestCheckClamdConnection:
                         is_connected, message = clamav_detection.check_clamd_connection()
                         assert is_connected is True
                         assert message == "PONG"
+
+    def test_check_clamd_connection_uses_fedora_config_file_when_socket_matches(self):
+        """Test Fedora socket probes use the detected scan.conf."""
+        with mock.patch.object(
+            clamav_detection,
+            "check_clamdscan_installed",
+            return_value=(True, "ClamAV 1.2.3"),
+        ):
+            with mock.patch.object(clamav_detection, "is_flatpak", return_value=False):
+                with mock.patch.object(
+                    clamav_detection,
+                    "get_clamd_socket_path",
+                    return_value="/run/clamd.scan/clamd.sock",
+                ):
+                    with mock.patch.object(
+                        clamav_detection,
+                        "detect_clamd_conf_path",
+                        return_value="/etc/clamd.d/scan.conf",
+                    ):
+                        with mock.patch.object(
+                            clamav_detection,
+                            "wrap_host_command",
+                            return_value=[
+                                "clamdscan",
+                                "--config-file",
+                                "/etc/clamd.d/scan.conf",
+                                "--ping",
+                                "3",
+                            ],
+                        ) as mock_wrap:
+                            with mock.patch("subprocess.run") as mock_run:
+                                mock_run.return_value = mock.Mock(
+                                    returncode=0,
+                                    stdout="PONG\n",
+                                    stderr="",
+                                )
+                                is_connected, message = clamav_detection.check_clamd_connection()
+                                assert is_connected is True
+                                assert message == "PONG"
+                                mock_wrap.assert_called_once_with(
+                                    [
+                                        "clamdscan",
+                                        "--config-file",
+                                        "/etc/clamd.d/scan.conf",
+                                        "--ping",
+                                        "3",
+                                    ],
+                                    force_host=True,
+                                )
+
+    def test_check_clamd_connection_permission_denied_mentions_socket_permissions(self):
+        """Test permission errors mention LocalSocket permissions when config is known."""
+        with mock.patch.object(
+            clamav_detection,
+            "check_clamdscan_installed",
+            return_value=(True, "ClamAV 1.2.3"),
+        ):
+            with mock.patch.object(clamav_detection, "is_flatpak", return_value=False):
+                with mock.patch.object(
+                    clamav_detection,
+                    "wrap_host_command",
+                    return_value=[
+                        "clamdscan",
+                        "--config-file",
+                        "/etc/clamd.d/scan.conf",
+                        "--ping",
+                        "3",
+                    ],
+                ):
+                    with mock.patch("subprocess.run") as mock_run:
+                        mock_run.return_value = mock.Mock(
+                            returncode=2,
+                            stdout="",
+                            stderr="/run/clamd.scan/clamd.sock: Permission denied",
+                        )
+                        is_connected, message = clamav_detection.check_clamd_connection(
+                            config_path="/etc/clamd.d/scan.conf",
+                            socket_path="/run/clamd.scan/clamd.sock",
+                        )
+                        assert is_connected is False
+                        assert "localsocketgroup" in message.lower()
+                        assert "/etc/clamd.d/scan.conf" in message
 
     def test_check_clamd_connection_uses_wrap_host_command_with_force_host(self):
         """Test check_clamd_connection uses wrap_host_command with force_host=True."""

@@ -152,7 +152,7 @@ from pathlib import Path
 from gi.repository import GLib
 
 from .sanitize import redact_sensitive_log_data, sanitize_log_line, sanitize_log_text
-from .utils import is_flatpak, which_host_command, wrap_host_command
+from .utils import get_clean_env, is_flatpak, which_host_command, wrap_host_command
 
 logger = logging.getLogger(__name__)
 
@@ -1863,10 +1863,29 @@ class LogManager:
         Returns:
             Tuple of (DaemonStatus, optional_message)
         """
-        # Check if clamd is installed (checking host if in Flatpak)
-        clamd_path = which_host_command("clamd")
-        if clamd_path is None:
-            return (DaemonStatus.NOT_INSTALLED, "clamd is not installed")
+        service_names = (
+            "clamav-daemon.service",
+            "clamd@scan.service",
+            "clamd.service",
+        )
+        saw_installed_service = False
+
+        for service_name in service_names:
+            try:
+                result = subprocess.run(
+                    wrap_host_command(["systemctl", "is-active", service_name]),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    env=get_clean_env(),
+                )
+                status_text = sanitize_log_line(result.stdout.strip())
+                if status_text == "active":
+                    return (DaemonStatus.RUNNING, f"{service_name} is active")
+                if status_text in {"inactive", "failed", "activating", "deactivating"}:
+                    saw_installed_service = True
+            except (subprocess.SubprocessError, FileNotFoundError, OSError):
+                logger.debug("systemctl is-active failed for %s", service_name, exc_info=True)
 
         # Check if clamd process is running (on host if in Flatpak)
         try:
@@ -1875,13 +1894,22 @@ class LogManager:
                 capture_output=True,
                 text=True,
                 timeout=5,
+                env=get_clean_env(),
             )
             if result.returncode == 0:
                 return (DaemonStatus.RUNNING, "clamd daemon is running")
-            else:
-                return (DaemonStatus.STOPPED, "clamd daemon is not running")
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
-            return (DaemonStatus.UNKNOWN, "Unable to determine daemon status")
+            logger.debug("pgrep failed while checking clamd status", exc_info=True)
+
+        if saw_installed_service:
+            return (DaemonStatus.STOPPED, "clamd service is installed but not active")
+
+        # Check if clamd is installed (checking host if in Flatpak)
+        clamd_path = which_host_command("clamd")
+        if clamd_path is None:
+            return (DaemonStatus.NOT_INSTALLED, "clamd is not installed")
+
+        return (DaemonStatus.STOPPED, "clamd daemon is not running")
 
     def _file_exists_on_host(self, path: str) -> bool:
         """

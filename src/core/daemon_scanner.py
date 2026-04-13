@@ -39,6 +39,7 @@ from .utils import (
     check_clamd_connection,
     check_clamdscan_installed,
     get_clean_env,
+    resolve_clamd_conf_path,
     validate_path,
 )
 
@@ -72,6 +73,28 @@ class DaemonScanner:
         self._log_manager = log_manager if log_manager else LogManager()
         self._settings_manager = settings_manager
 
+    def _get_clamd_config_path(self) -> str | None:
+        """Resolve the configured clamd.conf path when settings are available."""
+        if self._settings_manager is None:
+            return None
+
+        try:
+            saved_path = self._settings_manager.get("clamd_conf_path", "")
+        except Exception:
+            logger.debug("Failed to read clamd_conf_path from settings", exc_info=True)
+            return None
+
+        if not isinstance(saved_path, str):
+            return None
+        if saved_path and not os.path.isabs(saved_path):
+            return None
+
+        try:
+            return resolve_clamd_conf_path(self._settings_manager)
+        except Exception:
+            logger.debug("Failed to resolve clamd config path", exc_info=True)
+            return None
+
     def check_available(self) -> tuple[bool, str | None]:
         """
         Check if daemon scanning is available.
@@ -87,7 +110,7 @@ class DaemonScanner:
             return (False, error)
 
         # Check clamd is running and responding
-        is_connected, message = check_clamd_connection()
+        is_connected, message = check_clamd_connection(config_path=self._get_clamd_config_path())
         if not is_connected:
             return (False, f"clamd not accessible: {message}")
 
@@ -397,6 +420,10 @@ class DaemonScanner:
             cmd = ["stdbuf", "-oL", "clamdscan"]
         else:
             cmd = ["clamdscan"]
+
+        config_path = self._get_clamd_config_path()
+        if config_path:
+            cmd.extend(["--config-file", config_path])
 
         # For file-list scans, keep --fdpass enabled so clamdscan uses passed
         # descriptors instead of daemon-side path checks. This preserves the

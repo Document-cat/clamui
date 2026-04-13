@@ -610,6 +610,27 @@ class TestScannerPageAsyncDaemonCheck:
             assert call_kwargs.get("daemon") is True
             mock_thread.start.assert_called_once()
 
+    def test_create_page_passes_config_path_to_daemon_check(
+        self, mock_gi_modules, mock_settings_manager
+    ):
+        """Test create_page passes clamd.conf path into the background daemon check."""
+        from src.ui.preferences.scanner_page import ScannerPage
+
+        with mock.patch("src.ui.preferences.scanner_page.threading") as mock_threading:
+            mock_thread = mock.MagicMock()
+            mock_threading.Thread.return_value = mock_thread
+
+            ScannerPage.create_page(
+                "/etc/clamd.d/scan.conf",
+                {},
+                mock_settings_manager,
+                True,
+                None,
+            )
+
+            call_args = mock_threading.Thread.call_args[1]["args"]
+            assert call_args[2] == "/etc/clamd.d/scan.conf"
+
     def test_create_page_shows_checking_status_initially(
         self, mock_gi_modules, mock_settings_manager
     ):
