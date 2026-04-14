@@ -511,9 +511,9 @@ class ProfileDialog(Adw.Window):
             Configured Adw.ActionRow
         """
         row = Adw.ActionRow()
-        row.set_title(path)
+        row.set_title(GLib.markup_escape_text(path))
         if subtitle:
-            row.set_subtitle(subtitle)
+            row.set_subtitle(GLib.markup_escape_text(subtitle))
         add_row_icon(row, icon_name)
 
         # Remove button
@@ -1159,7 +1159,7 @@ class ProfileListDialog(Adw.Window):
             Configured Adw.ActionRow
         """
         row = Adw.ActionRow()
-        row.set_title(profile.name)
+        row.set_title(GLib.markup_escape_text(profile.name))
 
         # Build subtitle with profile details
         subtitle_parts = []
@@ -1178,7 +1178,7 @@ class ProfileListDialog(Adw.Window):
             subtitle_parts.append(_("Default profile"))
 
         if subtitle_parts:
-            row.set_subtitle(" • ".join(subtitle_parts))
+            row.set_subtitle(GLib.markup_escape_text(" \u2022 ".join(subtitle_parts)))
 
         # Set icon based on profile type
         if profile.is_default:

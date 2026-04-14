@@ -768,7 +768,7 @@ class ScanView(Gtk.Box):
 
         # Format path for display
         formatted_path = format_scan_path(path)
-        row.set_title(formatted_path)
+        row.set_title(GLib.markup_escape_text(formatted_path))
 
         # Set tooltip with full path
         row.set_tooltip_text(path)
@@ -1265,12 +1265,14 @@ class ScanView(Gtk.Box):
                     )
                 )
             else:
-                self._progress_label.set_text(_("Scanning... {pct}%{overflow}").format(pct=pct, overflow=overflow_suffix))
+                self._progress_label.set_text(
+                    _("Scanning... {pct}%{overflow}").format(pct=pct, overflow=overflow_suffix)
+                )
 
         # Update current file row subtitle with the file being scanned
         if self._current_file_row is not None and progress.current_file:
             display_path = self._format_path_for_display(progress.current_file)
-            self._current_file_row.set_subtitle(display_path)
+            self._current_file_row.set_subtitle(GLib.markup_escape_text(display_path))
 
         # Update stats row with cumulative counts for multi-target scans
         if self._stats_row is not None:

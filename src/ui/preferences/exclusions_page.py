@@ -10,7 +10,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, GLib, Gtk
 
 from ...core.i18n import N_, _
 from ..compat import create_entry_row, create_switch_row
@@ -109,7 +109,7 @@ class ExclusionsPage(PreferencesPageMixin):
             # Create a row for each preset with folder icon
             row = create_switch_row("folder-symbolic")
             row.set_title(_(preset["description"]))
-            row.set_subtitle(preset["pattern"])
+            row.set_subtitle(GLib.markup_escape_text(preset["pattern"]))
             row.set_active(preset["enabled"])
             preset_group.add(row)
 
@@ -165,7 +165,7 @@ class ExclusionsPage(PreferencesPageMixin):
             enabled: Whether the exclusion is enabled (default: True)
         """
         row = create_switch_row("folder-symbolic")
-        row.set_title(pattern)
+        row.set_title(GLib.markup_escape_text(pattern))
         row.set_active(enabled)
 
         # Connect switch to save enabled state

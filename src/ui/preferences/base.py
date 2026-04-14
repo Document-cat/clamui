@@ -540,9 +540,7 @@ class PreferencesPageMixin:
                 if check.returncode != 0:
                     self._show_simple_dialog(
                         _("Folder Not Found"),
-                        _("The folder '{path}' does not exist.").format(
-                            path=folder_path
-                        ),
+                        _("The folder '{path}' does not exist.").format(path=folder_path),
                     )
                     return
                 # Open on the host filesystem
@@ -560,9 +558,7 @@ class PreferencesPageMixin:
             if not os.path.isdir(folder_path):
                 self._show_simple_dialog(
                     _("Folder Not Found"),
-                    _("The folder '{path}' does not exist.").format(
-                        path=folder_path
-                    ),
+                    _("The folder '{path}' does not exist.").format(path=folder_path),
                 )
                 return
             try:
@@ -689,7 +685,7 @@ class PreferencesPageMixin:
         # File path row
         path_row = Adw.ActionRow()
         path_row.set_title(_("File Location"))
-        path_row.set_subtitle(file_path)
+        path_row.set_subtitle(GLib.markup_escape_text(file_path))
         safe_set_subtitle_selectable(path_row, True)
 
         # Add folder icon as prefix

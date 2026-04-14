@@ -220,7 +220,9 @@ class ScanResultsDialog(Adw.Window):
             icon.add_css_class("accent")
         else:
             expander.set_title(_("Scan Error"))
-            expander.set_subtitle(self._scan_result.error_message or _("Unknown error"))
+            expander.set_subtitle(
+                GLib.markup_escape_text(self._scan_result.error_message or _("Unknown error"))
+            )
             icon = Gtk.Image.new_from_icon_name(resolve_icon_name("dialog-error-symbolic"))
             icon.add_css_class("error")
 
@@ -311,7 +313,7 @@ class ScanResultsDialog(Adw.Window):
 
         for file_path in display_files:
             row = Adw.ActionRow()
-            row.set_title(file_path)
+            row.set_title(GLib.markup_escape_text(file_path))
             row.add_css_class("property")
             expander.add_row(row)
 

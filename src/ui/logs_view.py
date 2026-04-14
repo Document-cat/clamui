@@ -683,7 +683,7 @@ class LogsView(Gtk.Box):
             add_row_icon(row, "software-update-available-symbolic")
 
         # Set title with summary
-        row.set_title(entry.summary)
+        row.set_title(GLib.markup_escape_text(entry.summary))
 
         # Set subtitle with timestamp and status
         try:
@@ -701,7 +701,7 @@ class LogsView(Gtk.Box):
             if len(path_display) > 40:
                 path_display = "..." + path_display[-37:]
             subtitle += f" \u2022 {path_display}"
-        row.set_subtitle(subtitle)
+        row.set_subtitle(GLib.markup_escape_text(subtitle))
 
         # Add status indicator
         status_icon = Gtk.Image()

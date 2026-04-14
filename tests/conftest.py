@@ -259,6 +259,8 @@ def mock_gi_modules():
     mock_adw = MagicMock()
     mock_gio = MagicMock()
     mock_glib = MagicMock()
+    # markup_escape_text must pass through text so tests can assert on actual values
+    mock_glib.markup_escape_text = MagicMock(side_effect=lambda text, *args: text)
 
     # Set real classes for widgets (required for object.__new__)
     mock_gtk.Box = MockGtkBox
