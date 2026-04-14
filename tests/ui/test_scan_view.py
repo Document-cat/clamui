@@ -1492,6 +1492,7 @@ class TestProgressUpdates:
         progress.infected_threats = {}
         progress.current_file = current_file
         progress.percentage = percentage
+        progress.estimate_exceeded = False
         return progress
 
     def test_start_progress_pulse_creates_timeout(self, mock_scan_view):
