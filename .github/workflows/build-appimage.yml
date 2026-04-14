@@ -40,6 +40,11 @@ jobs:
             libfuse2t64 wget rsync
 
       - name: Build AppImage
+        env:
+          # Embed update information for delta updates on tag (release) builds.
+          # AppImageUpdate, AppImageLauncher, and AM use this to perform efficient
+          # zsync-based updates that only download changed blocks.
+          UPDATE_INFORMATION: ${{ startsWith(github.ref, 'refs/tags/') && 'gh-releases-zsync|linx-systems|clamui|latest|ClamUI-*-x86_64.AppImage.zsync' || '' }}
         run: ./appimage/build-appimage.sh
 
       - name: Test AppImage (smoke test)
@@ -107,8 +112,14 @@ jobs:
           APPIMAGE=$(ls ClamUI-*.AppImage)
           ./$APPIMAGE --appimage-extract
 
-          # Re-package with signature
-          ./appimagetool-x86_64.AppImage --sign --sign-key ${{ steps.gpg.outputs.fingerprint }} \
+          # Build signing args - re-embed update info so it survives re-packaging
+          SIGN_ARGS=(--sign --sign-key "${{ steps.gpg.outputs.fingerprint }}")
+          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            SIGN_ARGS+=(-u "gh-releases-zsync|linx-systems|clamui|latest|ClamUI-*-x86_64.AppImage.zsync")
+          fi
+
+          # Re-package with signature (and update info if tag build)
+          ./appimagetool-x86_64.AppImage "${SIGN_ARGS[@]}" \
             squashfs-root/ "$APPIMAGE"
 
           # Cleanup
@@ -118,5 +129,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: appimage-package
-          path: ClamUI-*.AppImage
+          path: |
+            ClamUI-*.AppImage
+            ClamUI-*.AppImage.zsync
           retention-days: 7

@@ -66,6 +66,12 @@ The script will:
     5. Run linuxdeploy to resolve shared library dependencies
     6. Output a portable AppImage
 
+Environment variables:
+    UPDATE_INFORMATION    Embed update info for delta updates (AppImageUpdate).
+                          For GitHub releases:
+                          "gh-releases-zsync|owner|repo|latest|Pattern-*.AppImage.zsync"
+                          When set, a .zsync file is generated alongside the AppImage.
+
 Output: ClamUI-VERSION-x86_64.AppImage in the project root directory.
 
 Run the generated AppImage with:
@@ -1080,10 +1086,24 @@ create_appimage() {
 
 	log_info "Running appimagetool..."
 
-	# Run appimagetool to create the AppImage
+	# Build appimagetool arguments
 	# --appimage-extract-and-run avoids FUSE requirement during build
+	APPIMAGETOOL_ARGS=(
+		--appimage-extract-and-run
+	)
+
+	# Embed update information for delta updates (AppImageUpdate/zsync2)
+	# Set UPDATE_INFORMATION env var to enable. For GitHub releases:
+	#   UPDATE_INFORMATION="gh-releases-zsync|owner|repo|latest|Pattern-*-x86_64.AppImage.zsync"
+	if [ -n "${UPDATE_INFORMATION:-}" ]; then
+		log_info "Embedding update information: $UPDATE_INFORMATION"
+		APPIMAGETOOL_ARGS+=(-u "$UPDATE_INFORMATION")
+	else
+		log_info "No UPDATE_INFORMATION set, skipping delta update support"
+	fi
+
 	"$APPIMAGETOOL" \
-		--appimage-extract-and-run \
+		"${APPIMAGETOOL_ARGS[@]}" \
 		"$APPDIR" \
 		"$APPIMAGE_OUTPUT"
 
@@ -1097,6 +1117,15 @@ create_appimage() {
 
 	chmod +x "$APPIMAGE_OUTPUT"
 	log_success "AppImage created: $APPIMAGE_FILENAME"
+
+	# Check for generated zsync file (created when update info is embedded)
+	ZSYNC_FILE="${APPIMAGE_OUTPUT}.zsync"
+	if [ -f "$ZSYNC_FILE" ]; then
+		log_success "zsync file created: ${APPIMAGE_FILENAME}.zsync"
+	elif [ -n "${UPDATE_INFORMATION:-}" ]; then
+		log_warning "Update information was set but no .zsync file was generated"
+		log_warning "Delta updates will not work without the .zsync file"
+	fi
 
 	return 0
 }
@@ -1137,6 +1166,15 @@ print_summary() {
 	if [ -f "$PROJECT_ROOT/$APPIMAGE_FILENAME" ]; then
 		APPIMAGE_SIZE=$(du -h "$PROJECT_ROOT/$APPIMAGE_FILENAME" | cut -f1)
 		log_info "Size: $APPIMAGE_SIZE"
+		echo
+	fi
+
+	# Report zsync file for delta updates
+	ZSYNC_FILE="$PROJECT_ROOT/${APPIMAGE_FILENAME}.zsync"
+	if [ -f "$ZSYNC_FILE" ]; then
+		ZSYNC_SIZE=$(du -h "$ZSYNC_FILE" | cut -f1)
+		log_info "zsync file: ${APPIMAGE_FILENAME}.zsync ($ZSYNC_SIZE)"
+		log_info "Delta updates enabled (AppImageUpdate compatible)"
 		echo
 	fi
 
