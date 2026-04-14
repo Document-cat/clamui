@@ -9,4 +9,5 @@ Terminal=false
 Categories=GTK;Utility;Security;
 Keywords=antivirus;virus;scanner;clamav;security;malware;virustotal;
 StartupNotify=true
+StartupWMClass=io.github.linx_systems.ClamUI
 NoDisplay=false
