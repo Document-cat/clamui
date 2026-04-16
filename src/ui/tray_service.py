@@ -199,6 +199,12 @@ class TrayService:
     DBUS_NAME = "io.github.linx_systems.ClamUI.tray"
     SNI_PATH = "/StatusNotifierItem"
     MENU_PATH = "/MenuBar"
+    WATCHER_NAMES = [
+        "org.x.StatusNotifierWatcher",
+        "org.kde.StatusNotifierWatcher",
+        "org.freedesktop.StatusNotifierWatcher",
+    ]
+    WATCHER_RETRY_DELAY_MS = 2000
 
     def __init__(self):
         """Initialize the tray service."""
@@ -207,6 +213,9 @@ class TrayService:
         self._sni_registration_id = 0
         self._bus_name_id = 0
         self._running = True
+        self._watcher_registered = False
+        self._watcher_name: str | None = None
+        self._watcher_retry_source_id = 0
 
         # Status state
         self._current_status = "protected"
@@ -484,43 +493,81 @@ class TrayService:
             except Exception as e:
                 logger.error(f"Failed to emit {signal_name}: {e}")
 
-    def _register_with_watcher(self) -> None:
-        """Register with the StatusNotifierWatcher."""
-        if not self._bus:
+    def _clear_watcher_retry(self) -> None:
+        """Cancel a pending watcher retry timer."""
+        if not self._watcher_retry_source_id:
             return
 
-        # Try xapp watcher first, then kde watcher
-        watchers = ["org.x.StatusNotifierWatcher", "org.kde.StatusNotifierWatcher"]
+        source_remove = getattr(GLib, "source_remove", None)
+        if source_remove is not None:
+            source_remove(self._watcher_retry_source_id)
+        self._watcher_retry_source_id = 0
 
-        for watcher in watchers:
-            try:
-                self._bus.call(
-                    watcher,
-                    "/StatusNotifierWatcher",
-                    "org.kde.StatusNotifierWatcher",
-                    "RegisterStatusNotifierItem",
-                    GLib.Variant("(s)", (self.DBUS_NAME,)),
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                    self._on_register_complete,
-                    watcher,
-                )
-                logger.info(f"Registering with {watcher}...")
-                return
-            except Exception as e:
-                logger.debug(f"Could not register with {watcher}: {e}")
+    def _schedule_watcher_retry(self) -> None:
+        """Retry watcher registration when the host is not ready yet."""
+        if not self._running or self._watcher_registered or self._watcher_retry_source_id:
+            return
 
-        logger.warning("No StatusNotifierWatcher available")
+        self._watcher_retry_source_id = GLib.timeout_add(
+            self.WATCHER_RETRY_DELAY_MS,
+            self._retry_register_with_watcher,
+        )
+        logger.info("No StatusNotifierWatcher available yet; retrying registration")
 
-    def _on_register_complete(self, source, result, watcher_name):
-        """Callback when registration completes."""
+    def _retry_register_with_watcher(self) -> bool:
+        """Timer callback to retry watcher registration."""
+        self._watcher_retry_source_id = 0
+        self._register_with_watcher()
+        return False
+
+    def _register_with_watcher(self) -> None:
+        """Register with the first available StatusNotifierWatcher."""
+        if not self._bus or self._watcher_registered:
+            return
+
+        self._try_register_with_watcher(0)
+
+    def _try_register_with_watcher(self, watcher_index: int) -> None:
+        """Attempt watcher registration, falling back across known watcher names."""
+        if not self._bus or self._watcher_registered:
+            return
+
+        if watcher_index >= len(self.WATCHER_NAMES):
+            self._schedule_watcher_retry()
+            return
+
+        watcher_name = self.WATCHER_NAMES[watcher_index]
         try:
-            self._bus.call_finish(result)
+            self._bus.call(
+                watcher_name,
+                "/StatusNotifierWatcher",
+                "org.kde.StatusNotifierWatcher",
+                "RegisterStatusNotifierItem",
+                GLib.Variant("(s)", (self.DBUS_NAME,)),
+                None,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                None,
+                self._on_register_complete,
+                (watcher_name, watcher_index + 1),
+            )
+            logger.info(f"Registering with {watcher_name}...")
+        except Exception as e:
+            logger.debug(f"Could not start registration with {watcher_name}: {e}")
+            self._try_register_with_watcher(watcher_index + 1)
+
+    def _on_register_complete(self, source, result, user_data):
+        """Callback when registration completes."""
+        watcher_name, next_watcher_index = user_data
+        try:
+            source.call_finish(result)
+            self._watcher_registered = True
+            self._watcher_name = watcher_name
+            self._clear_watcher_retry()
             logger.info(f"Successfully registered with {watcher_name}")
         except Exception as e:
-            logger.warning(f"Failed to register with {watcher_name}: {e}")
+            logger.debug(f"Failed to register with {watcher_name}: {e}")
+            self._try_register_with_watcher(next_watcher_index)
 
     def _on_bus_acquired(
         self, connection: Gio.DBusConnection, name: str, user_data: object = None
@@ -540,20 +587,21 @@ class TrayService:
         )
         logger.info(f"StatusNotifierItem interface registered at {self.SNI_PATH}")
 
-        # Register with the StatusNotifierWatcher
-        self._register_with_watcher()
-
     def _on_name_acquired(
         self, connection: Gio.DBusConnection, name: str, user_data: object = None
     ) -> None:
         """Called when D-Bus name is acquired."""
         logger.info(f"D-Bus name acquired: {name}")
+        self._register_with_watcher()
 
     def _on_name_lost(
         self, connection: Gio.DBusConnection, name: str, user_data: object = None
     ) -> None:
         """Called when D-Bus name is lost."""
         logger.warning(f"D-Bus name lost: {name}")
+        self._watcher_registered = False
+        self._watcher_name = None
+        self._clear_watcher_retry()
 
     def _send_action(self, action: str) -> None:
         """Send an action event to the main application."""
@@ -647,6 +695,10 @@ class TrayService:
         # Release bus name
         if self._bus_name_id:
             Gio.bus_unown_name(self._bus_name_id)
+
+        self._watcher_registered = False
+        self._watcher_name = None
+        self._clear_watcher_retry()
 
         # Quit main loop
         if self._loop:

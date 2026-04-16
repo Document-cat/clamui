@@ -80,6 +80,9 @@ def tray_service(tray_service_class):
     service._sni_registration_id = 0
     service._bus_name_id = 0
     service._running = True
+    service._watcher_registered = False
+    service._watcher_name = None
+    service._watcher_retry_source_id = 0
 
     # Status state
     service._current_status = "protected"
@@ -593,12 +596,85 @@ class TestSNIProtocol:
         # Method name
         assert call_args[0][3] == "RegisterStatusNotifierItem"
 
+    def test_register_with_watcher_falls_back_to_next_watcher(self, tray_service):
+        """Test watcher registration falls back when the first watcher is unavailable."""
+        mock_bus = mock.MagicMock()
+        mock_bus.call_finish.side_effect = RuntimeError("watcher unavailable")
+        tray_service._bus = mock_bus
+        tray_service._schedule_watcher_retry = mock.MagicMock()
+
+        tray_service._register_with_watcher()
+
+        first_call = mock_bus.call.call_args_list[0]
+        callback = first_call[0][9]
+        user_data = first_call[0][10]
+        callback(mock_bus, mock.sentinel.result, user_data)
+
+        assert mock_bus.call.call_count == 2
+        assert mock_bus.call.call_args_list[0][0][0] == "org.x.StatusNotifierWatcher"
+        assert mock_bus.call.call_args_list[1][0][0] == "org.kde.StatusNotifierWatcher"
+
+    def test_register_with_watcher_schedules_retry_after_all_watchers_fail(self, tray_service):
+        """Test watcher registration retries after all known watcher names fail."""
+        mock_bus = mock.MagicMock()
+        mock_bus.call_finish.side_effect = RuntimeError("watcher unavailable")
+        tray_service._bus = mock_bus
+        tray_service._schedule_watcher_retry = mock.MagicMock()
+
+        tray_service._register_with_watcher()
+
+        for _ in range(3):
+            call = mock_bus.call.call_args_list[-1]
+            callback = call[0][9]
+            user_data = call[0][10]
+            callback(mock_bus, mock.sentinel.result, user_data)
+
+        assert mock_bus.call.call_count == 3
+        tray_service._schedule_watcher_retry.assert_called_once()
+
+    def test_register_with_watcher_marks_successful_registration(self, tray_service):
+        """Test successful watcher registration records the watcher name."""
+        mock_bus = mock.MagicMock()
+        tray_service._bus = mock_bus
+        tray_service._clear_watcher_retry = mock.MagicMock()
+
+        tray_service._register_with_watcher()
+
+        first_call = mock_bus.call.call_args
+        callback = first_call[0][9]
+        user_data = first_call[0][10]
+        callback(mock_bus, mock.sentinel.result, user_data)
+
+        assert tray_service._watcher_registered is True
+        assert tray_service._watcher_name == "org.x.StatusNotifierWatcher"
+        tray_service._clear_watcher_retry.assert_called_once()
+
     def test_register_with_watcher_noop_when_no_bus(self, tray_service):
         """Test _register_with_watcher does nothing when no bus connection."""
         tray_service._bus = None
 
         # Should not raise
         tray_service._register_with_watcher()
+
+    def test_on_bus_acquired_registers_sni_interface_without_watcher_registration(
+        self, tray_service, mock_glib_gio
+    ):
+        """Test SNI object export happens on bus acquisition, before watcher registration."""
+        connection = mock.MagicMock()
+        tray_service._register_with_watcher = mock.MagicMock()
+
+        tray_service._on_bus_acquired(connection, tray_service.DBUS_NAME)
+
+        connection.register_object.assert_called_once()
+        tray_service._register_with_watcher.assert_not_called()
+
+    def test_on_name_acquired_starts_watcher_registration(self, tray_service):
+        """Test watcher registration starts only after the bus name is owned."""
+        tray_service._register_with_watcher = mock.MagicMock()
+
+        tray_service._on_name_acquired(mock.MagicMock(), tray_service.DBUS_NAME)
+
+        tray_service._register_with_watcher.assert_called_once()
 
 
 # =============================================================================
