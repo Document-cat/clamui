@@ -25,7 +25,9 @@ from ..core.utils import (
     is_flatpak,
     validate_dropped_files,
 )
+from .clipboard_helper import ClipboardHelper
 from .compat import create_banner, open_paths_dialog
+from .fullscreen_dialog import FullscreenLogDialog
 from .profile_dialogs import ProfileListDialog
 from .scan_results_dialog import ScanResultsDialog
 from .utils import add_row_icon, resolve_icon_name
@@ -49,6 +51,9 @@ logger = logging.getLogger(__name__)
 # EICAR test string - industry-standard antivirus test pattern
 # This is NOT malware - it's a safe test string recognized by all AV software
 EICAR_TEST_STRING = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+STATUS_DETAIL_SUMMARY_MAX_CHARS = 160
+STATUS_DETAIL_MIN_HEIGHT = 120
+STATUS_DETAIL_MAX_HEIGHT = 260
 
 
 class ScanView(Gtk.Box):
@@ -142,6 +147,14 @@ class ScanView(Gtk.Box):
         self._view_results_section: Gtk.Box | None = None
         self._view_results_button: Gtk.Button | None = None
 
+        # Detailed status output state
+        self._status_detail_group: Adw.PreferencesGroup | None = None
+        self._status_detail_text: Gtk.TextView | None = None
+        self._status_detail_copy_button: Gtk.Button | None = None
+        self._status_detail_fullscreen_button: Gtk.Button | None = None
+        self._status_detail_content: str = ""
+        self._status_detail_title_text: str = ""
+
         # Profile management state
         self._selected_profile: ScanProfile | None = None
         self._profile_list: list[ScanProfile] = []
@@ -186,6 +199,7 @@ class ScanView(Gtk.Box):
 
         # Create the status bar
         self._create_status_bar()
+        self._create_status_detail_section()
 
         # Set up drag-and-drop support
         self._setup_drop_target()
@@ -468,6 +482,7 @@ class ScanView(Gtk.Box):
             banner: The Adw.Banner that was dismissed
         """
         banner.set_revealed(False)
+        self._hide_status_details(clear_content=False)
 
     def _show_drop_error(self, message: str):
         """
@@ -480,10 +495,211 @@ class ScanView(Gtk.Box):
         Args:
             message: The error message to display
         """
-        self._status_banner.set_title(message)
-        set_status_class(self._status_banner, StatusLevel.ERROR)
-        self._status_banner.set_revealed(True)
+        self._set_status_message(message, StatusLevel.ERROR)
         self._show_toast(message)
+
+    def _create_status_detail_section(self) -> None:
+        """Create the bounded detail panel used for long scan output."""
+        detail_group = Adw.PreferencesGroup()
+        detail_group.set_title(_("Scan details"))
+        detail_group.set_description(_("Detailed scan output appears here when available"))
+        detail_group.set_visible(False)
+        self._status_detail_group = detail_group
+
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        header_box.set_halign(Gtk.Align.END)
+
+        copy_button = Gtk.Button()
+        copy_button.set_icon_name(resolve_icon_name("edit-copy-symbolic"))
+        copy_button.set_tooltip_text(_("Copy details"))
+        copy_button.add_css_class("flat")
+        copy_button.set_sensitive(False)
+        copy_button.connect("clicked", self._on_copy_status_details_clicked)
+        self._status_detail_copy_button = copy_button
+
+        fullscreen_button = Gtk.Button()
+        fullscreen_button.set_icon_name(resolve_icon_name("view-fullscreen-symbolic"))
+        fullscreen_button.set_tooltip_text(_("View details fullscreen"))
+        fullscreen_button.add_css_class("flat")
+        fullscreen_button.set_sensitive(False)
+        fullscreen_button.connect("clicked", self._on_fullscreen_status_details_clicked)
+        self._status_detail_fullscreen_button = fullscreen_button
+
+        header_box.append(copy_button)
+        header_box.append(fullscreen_button)
+        detail_group.set_header_suffix(header_box)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_hexpand(True)
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(STATUS_DETAIL_MIN_HEIGHT)
+        scrolled.set_max_content_height(STATUS_DETAIL_MAX_HEIGHT)
+        scrolled.add_css_class("card")
+
+        text_view = Gtk.TextView()
+        text_view.set_editable(False)
+        text_view.set_cursor_visible(False)
+        text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        text_view.set_left_margin(12)
+        text_view.set_right_margin(12)
+        text_view.set_top_margin(12)
+        text_view.set_bottom_margin(12)
+        text_view.add_css_class("monospace")
+        self._status_detail_text = text_view
+
+        scrolled.set_child(text_view)
+        detail_group.add(scrolled)
+        self.append(detail_group)
+
+    def _set_status_detail_content(self, content: str) -> None:
+        """Update the stored detail content and the visible text buffer."""
+        self._status_detail_content = content
+
+        text_view = getattr(self, "_status_detail_text", None)
+        if text_view is None:
+            return
+
+        buffer = text_view.get_buffer()
+        buffer.set_text(content)
+
+    def _show_status_details(
+        self,
+        title: str,
+        content: str,
+        description: str | None = None,
+    ) -> None:
+        """Reveal the status detail panel with the provided content."""
+        detail_text = content.strip()
+        if not detail_text:
+            self._hide_status_details(clear_content=True)
+            return
+
+        self._status_detail_title_text = title
+        self._set_status_detail_content(detail_text)
+
+        detail_group = getattr(self, "_status_detail_group", None)
+        if detail_group is not None:
+            detail_group.set_title(title)
+            if description is not None:
+                detail_group.set_description(description)
+            detail_group.set_visible(True)
+
+        copy_button = getattr(self, "_status_detail_copy_button", None)
+        if copy_button is not None:
+            copy_button.set_sensitive(True)
+
+        fullscreen_button = getattr(self, "_status_detail_fullscreen_button", None)
+        if fullscreen_button is not None:
+            fullscreen_button.set_sensitive(True)
+
+    def _hide_status_details(self, clear_content: bool = True) -> None:
+        """Hide the status detail panel and optionally clear its content."""
+        detail_group = getattr(self, "_status_detail_group", None)
+        if detail_group is not None:
+            detail_group.set_visible(False)
+
+        copy_button = getattr(self, "_status_detail_copy_button", None)
+        if copy_button is not None:
+            copy_button.set_sensitive(False)
+
+        fullscreen_button = getattr(self, "_status_detail_fullscreen_button", None)
+        if fullscreen_button is not None:
+            fullscreen_button.set_sensitive(False)
+
+        if clear_content:
+            self._status_detail_title_text = ""
+            self._set_status_detail_content("")
+
+    def _set_status_message(
+        self,
+        title: str,
+        level: StatusLevel,
+        detail_content: str | None = None,
+        detail_title: str | None = None,
+        detail_description: str | None = None,
+    ) -> None:
+        """Update the status banner and optional detail panel together."""
+        self._status_banner.set_title(title)
+        set_status_class(self._status_banner, level)
+        self._status_banner.set_revealed(True)
+
+        if detail_content and detail_title:
+            self._show_status_details(detail_title, detail_content, detail_description)
+        else:
+            self._hide_status_details(clear_content=True)
+
+    def _summarize_status_detail(self, detail: str) -> str:
+        """Collapse multi-line detail text into a short banner-friendly summary."""
+        summary = next((line.strip() for line in detail.splitlines() if line.strip()), "")
+        if not summary:
+            return _("Unknown error")
+        if len(summary) > STATUS_DETAIL_SUMMARY_MAX_CHARS:
+            return summary[: STATUS_DETAIL_SUMMARY_MAX_CHARS - 3].rstrip() + "..."
+        return summary
+
+    def _should_show_status_details(self, detail: str) -> bool:
+        """Return True when the detail content merits a dedicated panel."""
+        detail_text = detail.strip()
+        return bool(detail_text) and (
+            "\n" in detail_text or len(detail_text) > STATUS_DETAIL_SUMMARY_MAX_CHARS
+        )
+
+    def _build_scan_error_details(self, result: ScanResult) -> str:
+        """Build detailed error output for the status detail panel."""
+        sections: list[str] = []
+        error_message = (result.error_message or "").strip()
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+
+        if error_message and error_message not in {stderr, stdout}:
+            sections.append(_("Summary:"))
+            sections.append(error_message)
+
+        if stderr:
+            if sections:
+                sections.append("")
+            sections.append(_("Error output:"))
+            sections.append(stderr)
+
+        if stdout and stdout != stderr:
+            if sections:
+                sections.append("")
+            sections.append(_("Scan output:"))
+            sections.append(stdout)
+
+        if not sections and error_message:
+            sections.append(error_message)
+
+        return "\n".join(sections).strip()
+
+    def _on_copy_status_details_clicked(self, button: Gtk.Button) -> None:
+        """Copy the current status detail content to the clipboard."""
+        detail_text = getattr(self, "_status_detail_content", "").strip()
+        if not detail_text:
+            return
+
+        helper = ClipboardHelper(parent_widget=self)
+        helper.copy_with_feedback(
+            text=detail_text,
+            success_message=_("Scan details copied to clipboard"),
+            error_message=_("Failed to copy scan details"),
+            too_large_message=_(
+                "Scan details are too large to copy. Use fullscreen to inspect the full output."
+            ),
+        )
+
+    def _on_fullscreen_status_details_clicked(self, button: Gtk.Button) -> None:
+        """Open the current status detail content in the fullscreen viewer."""
+        detail_text = getattr(self, "_status_detail_content", "").strip()
+        if not detail_text:
+            return
+
+        title = self._status_detail_title_text or _("Scan details")
+        dialog = FullscreenLogDialog(title=title, content=detail_text)
+        root = self.get_root()
+        if root is not None:
+            dialog.set_transient_for(root)
+        dialog.present()
 
     def _show_toast(self, message: str) -> None:
         """
@@ -1523,9 +1739,10 @@ class ScanView(Gtk.Box):
             button: The Gtk.Button that was clicked
         """
         if not self._selected_paths:
-            self._status_banner.set_title(_("Please select a file or folder to scan"))
-            set_status_class(self._status_banner, StatusLevel.WARNING)
-            self._status_banner.set_revealed(True)
+            self._set_status_message(
+                _("Please select a file or folder to scan"),
+                StatusLevel.WARNING,
+            )
             return
 
         # Check if virus database is available before scanning
@@ -1627,11 +1844,10 @@ class ScanView(Gtk.Box):
 
         except OSError as e:
             logger.error(f"Failed to create EICAR test file: {e}")
-            self._status_banner.set_title(
-                _("Failed to create EICAR test file: {error}").format(error=e)
+            self._set_status_message(
+                _("Failed to create EICAR test file: {error}").format(error=e),
+                StatusLevel.ERROR,
             )
-            set_status_class(self._status_banner, StatusLevel.ERROR)
-            self._status_banner.set_revealed(True)
 
     def _start_scanning(self):
         """Start the scanning process."""
@@ -1662,6 +1878,7 @@ class ScanView(Gtk.Box):
 
         # Dismiss any previous status banner
         self._status_banner.set_revealed(False)
+        self._hide_status_details(clear_content=True)
 
         # Hide previous results button
         self._hide_view_results()
@@ -1993,35 +2210,40 @@ class ScanView(Gtk.Box):
         # Show view results button and update status banner
         if result.status == ScanStatus.INFECTED:
             self._show_view_results(result.infected_count)
-            self._status_banner.set_title(
-                _("Scan complete - {count} threat(s) detected").format(count=result.infected_count)
+            self._set_status_message(
+                _("Scan complete - {count} threat(s) detected").format(count=result.infected_count),
+                StatusLevel.WARNING,
             )
-            set_status_class(self._status_banner, StatusLevel.WARNING)
-            self._status_banner.set_revealed(True)
         elif result.status == ScanStatus.CLEAN:
             self._show_view_results(0)
             if result.has_warnings:
                 # Clean but with warnings about skipped files
-                self._status_banner.set_title(
-                    _("Scan complete - No threats found ({count} file(s) not accessible)").format(
-                        count=result.skipped_count
-                    )
-                )
+                status_message = _(
+                    "Scan complete - No threats found ({count} file(s) not accessible)"
+                ).format(count=result.skipped_count)
             else:
-                self._status_banner.set_title(_("Scan complete - No threats found"))
-            set_status_class(self._status_banner, StatusLevel.SUCCESS)
-            self._status_banner.set_revealed(True)
+                status_message = _("Scan complete - No threats found")
+            self._set_status_message(status_message, StatusLevel.SUCCESS)
         elif result.status == ScanStatus.CANCELLED:
             self._show_view_results(result.infected_count)
-            self._status_banner.set_title(_("Scan cancelled"))
-            set_status_class(self._status_banner, StatusLevel.WARNING)
-            self._status_banner.set_revealed(True)
+            self._set_status_message(_("Scan cancelled"), StatusLevel.WARNING)
         elif result.status == ScanStatus.ERROR:
             self._show_view_results(0)
-            error_detail = result.error_message or result.stderr or "Unknown error"
-            self._status_banner.set_title(_("Scan error: {detail}").format(detail=error_detail))
-            set_status_class(self._status_banner, StatusLevel.ERROR)
-            self._status_banner.set_revealed(True)
+            error_detail = (
+                result.error_message or result.stderr or result.stdout or _("Unknown error")
+            )
+            detail_content = self._build_scan_error_details(result)
+            self._set_status_message(
+                _("Scan error: {detail}").format(
+                    detail=self._summarize_status_detail(error_detail)
+                ),
+                StatusLevel.ERROR,
+                detail_content=(
+                    detail_content if self._should_show_status_details(detail_content) else None
+                ),
+                detail_title=_("Detailed scan error output"),
+                detail_description=_("Detailed ClamAV output from the latest failed scan"),
+            )
             logger.error(
                 "Scan failed: %s, stdout=%r, stderr=%r",
                 error_detail,
@@ -2030,11 +2252,10 @@ class ScanView(Gtk.Box):
             )
         else:
             self._show_view_results(0)
-            self._status_banner.set_title(
-                _("Scan completed with status: {status}").format(status=result.status.value)
+            self._set_status_message(
+                _("Scan completed with status: {status}").format(status=result.status.value),
+                StatusLevel.WARNING,
             )
-            set_status_class(self._status_banner, StatusLevel.WARNING)
-            self._status_banner.set_revealed(True)
 
     def _on_scan_error(self, error_msg: str):
         """
@@ -2064,9 +2285,14 @@ class ScanView(Gtk.Box):
         if self._on_scan_state_changed:
             self._on_scan_state_changed(self._is_scanning, None)
 
-        self._status_banner.set_title(_("Scan error: {detail}").format(detail=error_msg))
-        set_status_class(self._status_banner, StatusLevel.ERROR)
-        self._status_banner.set_revealed(True)
+        detail_text = error_msg.strip()
+        self._set_status_message(
+            _("Scan error: {detail}").format(detail=self._summarize_status_detail(detail_text)),
+            StatusLevel.ERROR,
+            detail_content=(detail_text if self._should_show_status_details(detail_text) else None),
+            detail_title=_("Detailed scan error output"),
+            detail_description=_("Detailed application error output from the latest failed scan"),
+        )
 
     def _on_cancel_clicked(self, button: Gtk.Button) -> None:
         """Handle cancel button click.

@@ -97,6 +97,13 @@ def mock_scan_view(scan_view_class):
     view._progress_section = mock.MagicMock()
     view._progress_bar = mock.MagicMock()
     view._progress_label = mock.MagicMock()
+    view._status_detail_group = mock.MagicMock()
+    view._status_detail_text = mock.MagicMock()
+    view._status_detail_text.get_buffer.return_value = mock.MagicMock()
+    view._status_detail_copy_button = mock.MagicMock()
+    view._status_detail_fullscreen_button = mock.MagicMock()
+    view._status_detail_content = ""
+    view._status_detail_title_text = ""
 
     # Live progress Adwaita widgets (used by _stop_progress_pulse, _update_live_progress)
     view._progress_group = mock.MagicMock()
@@ -1339,6 +1346,8 @@ class TestScanComplete:
     def test_on_scan_complete_error_result(self, mock_scan_view):
         """Test scan complete handler with error result."""
         self._setup_complete_mocks(mock_scan_view)
+        mock_scan_view._show_status_details = mock.MagicMock()
+        mock_scan_view._hide_status_details = mock.MagicMock()
 
         error_status = mock.MagicMock()
         error_status.value = "error"
@@ -1347,7 +1356,10 @@ class TestScanComplete:
         result.status = error_status
         result.infected_count = 0
         result.error_message = "ClamAV not found"
-        result.stderr = ""
+        result.stderr = (
+            "LibClamAV Error: Something went wrong while scanning\n"
+            "Bytecode run timed out in interpreter"
+        )
         result.stdout = ""
 
         with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
@@ -1361,6 +1373,9 @@ class TestScanComplete:
         mock_scan_view._status_banner.set_title.assert_called()
         call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
         assert "error" in call_arg.lower()
+        assert "ClamAV not found" in call_arg
+        assert "Bytecode run timed out" not in call_arg
+        mock_scan_view._show_status_details.assert_called_once()
 
     def test_on_scan_complete_cleans_eicar_file(self, mock_scan_view, tmp_path):
         """Test that scan complete cleans up EICAR temp file."""
@@ -1443,13 +1458,17 @@ class TestScanError:
     def test_on_scan_error_shows_error_message(self, mock_scan_view):
         """Test that scan error displays error message in status banner."""
         self._setup_error_mocks(mock_scan_view)
+        mock_scan_view._show_status_details = mock.MagicMock()
+        mock_scan_view._hide_status_details = mock.MagicMock()
 
         with mock.patch("src.ui.scan_view.set_status_class"):
-            mock_scan_view._on_scan_error("ClamAV process crashed")
+            mock_scan_view._on_scan_error("ClamAV process crashed\nTraceback line 2")
 
         mock_scan_view._status_banner.set_title.assert_called()
         call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
         assert "ClamAV process crashed" in call_arg
+        assert "Traceback line 2" not in call_arg
+        mock_scan_view._show_status_details.assert_called_once()
 
     def test_on_scan_error_cleans_eicar_file(self, mock_scan_view, tmp_path):
         """Test that scan error cleans up EICAR temp file."""
@@ -1464,6 +1483,42 @@ class TestScanError:
 
         assert not eicar_file.exists()
         assert mock_scan_view._eicar_temp_path == ""
+
+
+class TestStatusDetails:
+    """Tests for the scan status detail panel actions."""
+
+    def test_copy_status_details_uses_clipboard_helper(self, mock_scan_view):
+        """Copy action should delegate to ClipboardHelper with the stored detail text."""
+        mock_scan_view._status_detail_content = "Detailed scan output"
+
+        with mock.patch("src.ui.scan_view.ClipboardHelper") as mock_helper_class:
+            helper = mock_helper_class.return_value
+
+            mock_scan_view._on_copy_status_details_clicked(mock.MagicMock())
+
+        mock_helper_class.assert_called_once_with(parent_widget=mock_scan_view)
+        helper.copy_with_feedback.assert_called_once()
+        assert helper.copy_with_feedback.call_args.kwargs["text"] == "Detailed scan output"
+
+    def test_fullscreen_status_details_opens_dialog(self, mock_scan_view):
+        """Fullscreen action should open the fullscreen dialog with the stored detail text."""
+        mock_scan_view._status_detail_content = "Detailed scan output"
+        mock_scan_view._status_detail_title_text = "Detailed scan error output"
+        mock_root = mock.MagicMock()
+        mock_scan_view.get_root.return_value = mock_root
+
+        with mock.patch("src.ui.scan_view.FullscreenLogDialog") as mock_dialog_class:
+            dialog = mock_dialog_class.return_value
+
+            mock_scan_view._on_fullscreen_status_details_clicked(mock.MagicMock())
+
+        mock_dialog_class.assert_called_once_with(
+            title="Detailed scan error output",
+            content="Detailed scan output",
+        )
+        dialog.set_transient_for.assert_called_once_with(mock_root)
+        dialog.present.assert_called_once_with()
 
 
 class TestProgressUpdates:

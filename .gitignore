@@ -69,6 +69,7 @@ Thumbs.db
 .auto-claude/
 .auto-claude-status
 .claude_settings.json
+.codex
 .worktrees/
 .idea
 worktrees/

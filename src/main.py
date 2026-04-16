@@ -19,6 +19,8 @@ Usage:
     clamui history                                 # View scan history
 """
 
+import contextlib
+import logging
 import os
 import sys
 
@@ -95,6 +97,8 @@ _configure_logging()
 
 # NOTE: ClamUIApp (GTK4) import is deferred to main() to allow CLI
 # subcommands to run without initializing GTK.
+
+logger = logging.getLogger(__name__)
 
 
 def uri_to_path(uri: str) -> str:
@@ -191,6 +195,23 @@ def parse_file_arguments(argv: list[str]) -> list[str]:
     return parse_arguments(argv)[0]
 
 
+def _run_gui_application(app, argv: list[str]) -> int:
+    """
+    Run the GTK application and translate Ctrl+C into a clean exit code.
+
+    PyGObject's SIGINT fallback calls ``app.quit()`` and then re-raises
+    ``KeyboardInterrupt`` when unwinding ``Gio.Application.run()``. Catch that
+    here so terminal launches exit without a traceback.
+    """
+    try:
+        return app.run(argv)
+    except KeyboardInterrupt:
+        with contextlib.suppress(Exception):
+            app.quit()
+        logger.info("Application interrupted by SIGINT")
+        return 130
+
+
 def main():
     """
     Application entry point.
@@ -220,7 +241,7 @@ def main():
     # This enables single-instance behavior: when ClamUI is already running,
     # arguments from file manager context menu are forwarded to the running
     # instance via D-Bus, allowing it to start a new scan.
-    return app.run(sys.argv)
+    return _run_gui_application(app, sys.argv)
 
 
 if __name__ == "__main__":
