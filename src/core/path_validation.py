@@ -101,7 +101,7 @@ def check_symlink_safety(path: Path) -> tuple[bool, str | None]:
 
         return (True, None)
 
-    except (OSError, RuntimeError) as e:
+    except (OSError, RuntimeError, ValueError) as e:
         return (False, f"Error checking symlink: {e!s}")
 
 
@@ -138,7 +138,7 @@ def validate_path(path: str) -> tuple[bool, str | None]:
     # Normalize and resolve the path
     try:
         resolved_path = path_obj.resolve()
-    except (OSError, RuntimeError) as e:
+    except (OSError, RuntimeError, ValueError) as e:
         return (False, f"Error resolving path: {e!s}")
 
     # Check if path exists
@@ -205,7 +205,7 @@ def validate_dropped_files(paths: list[str | None]) -> tuple[list[str], list[str
             try:
                 resolved = str(Path(path).resolve())
                 valid_paths.append(resolved)
-            except (OSError, RuntimeError) as e:
+            except (OSError, RuntimeError, ValueError) as e:
                 errors.append(f"Error resolving path: {e!s}")
         else:
             if error:
@@ -249,7 +249,7 @@ def format_scan_path(path: str) -> str:
             return str(resolved)
 
         return str(resolved)
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return path
 
 
@@ -295,7 +295,7 @@ def get_path_info(path: str) -> dict:
 
         info["readable"] = os.access(resolved, os.R_OK)
 
-    except (OSError, RuntimeError) as e:
+    except (OSError, RuntimeError, ValueError) as e:
         logger.debug("Failed to get path info for '%s': %s", path, e)
 
     return info
