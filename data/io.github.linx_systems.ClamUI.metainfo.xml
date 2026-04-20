@@ -96,6 +96,25 @@
     </keywords>
 
     <releases>
+        <release version="0.1.7" date="2026-04-20">
+            <description>
+                <p>System security audit, Flatpak hardening, AppImage delta updates, and tray reliability</p>
+                <ul>
+                    <li>Add system security audit dashboard with firewall, MAC, SSH, rootkit, and ClamAV health checks</li>
+                    <li>Notify when the security audit finds issues and add info links for each check</li>
+                    <li>Add AppImage delta update support via zsync</li>
+                    <li>Add French and Italian translations</li>
+                    <li>Improve scan detail UX and GUI shutdown behavior</li>
+                    <li>Fix Plasma tray watcher registration timing and StartupWMClass for window matching</li>
+                    <li>Make folder opening, file dialogs, and app launching Flatpak-aware</li>
+                    <li>Handle non-UTF-8 filenames and filter non-fatal LibClamAV errors during scans</li>
+                    <li>Escape Pango markup in widget titles and clamp scan progress overflow</li>
+                    <li>Defer panel data loading and share LogManager across views for faster startup</li>
+                    <li>Restart ClamAV services after applying config changes and repair config duplication</li>
+                    <li>Refresh cryptography and certifi pins</li>
+                </ul>
+            </description>
+        </release>
         <release version="0.1.6" date="2026-04-03">
             <description>
                 <p>Security hardening, scanner reliability fixes, and release pipeline updates</p>
