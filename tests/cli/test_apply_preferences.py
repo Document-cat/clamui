@@ -147,7 +147,7 @@ class TestRestartUnitsForDestinations:
             patch("src.cli.apply_preferences.shutil.which", return_value="/usr/bin/systemctl"),
             patch("src.cli.apply_preferences.subprocess.run", side_effect=_fake_run),
         ):
-            with pytest.raises(RuntimeError, match="Failed to restart clamav-freshclam.service"):
+            with pytest.raises(RuntimeError, match=r"Failed to restart clamav-freshclam\.service"):
                 _restart_units_for_destinations([Path("/etc/clamav/freshclam.conf")])
 
 

@@ -4,8 +4,6 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.core.system_audit import (
     TIER1_CHECKS,
     AuditCategory,
@@ -248,8 +246,6 @@ class TestCheckClamavHealth:
             (True, "active"),   # clamav-daemon
             (True, "active"),   # clamav-freshclam
         ]
-
-        from src.core.system_audit import check_database_available
 
         with patch("src.core.system_audit.check_database_available") as mock_db:
             mock_db.return_value = (True, None)
