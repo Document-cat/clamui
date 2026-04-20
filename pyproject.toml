@@ -43,6 +43,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.12.0",
     "pytest-cov>=4.1.0",
+    "hypothesis>=6.98.0",
     "ruff>=0.14.10",
     "pygobject-stubs>=2.16.0",
 ]
@@ -145,6 +146,7 @@ markers = [
     "integration: marks tests as integration tests (may require external dependencies)",
     "ui: marks tests as UI tests (require GTK/display environment)",
     "slow: marks tests as slow running",
+    "property: marks tests as property-based (Hypothesis)",
 ]
 filterwarnings = [
     "error::DeprecationWarning",
@@ -184,6 +186,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-mock>=3.12.0",
     "pytest-cov>=4.1.0",
+    "hypothesis>=6.98.0",
     "ruff>=0.14.10",
     "pygobject-stubs>=2.16.0",
 ]
