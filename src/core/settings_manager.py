@@ -82,7 +82,10 @@ class SettingsManager:
         "freshclam_conf_path": "",  # Empty = auto-detect
         "clamd_size_limit_unit_migration_done": False,
         # VirusTotal settings
-        "virustotal_api_key": None,  # Fallback storage if keyring unavailable
+        "virustotal_api_key": None,  # Fallback storage if keyring unavailable (gated by
+        # allow_plaintext_api_key_fallback — default False, key is only written here
+        # when the user has explicitly opted in via preferences)
+        "allow_plaintext_api_key_fallback": False,
         "virustotal_remember_no_key_action": "none",  # "none", "open_website", "prompt"
         # Debug logging settings
         "debug_log_level": "WARNING",  # "DEBUG", "INFO", "WARNING", "ERROR"

@@ -28,6 +28,12 @@ TERMINATE_GRACE_TIMEOUT = 5  # Time to wait after SIGTERM before SIGKILL
 KILL_WAIT_TIMEOUT = 2  # Time to wait after SIGKILL
 STREAM_POLL_TIMEOUT = 0.1  # select() timeout for checking cancellation between output reads
 
+# Hard cap on accumulated subprocess output to prevent memory exhaustion from
+# pathological ClamAV output (crafted archives, verbose debug floods, etc.).
+# Per stream (stdout and stderr each). Lines beyond the cap are still delivered
+# to on_line callbacks but dropped from the accumulated buffer.
+MAX_ACCUMULATED_BYTES = 64 * 1024 * 1024
+
 _NONFATAL_SKIP_MARKERS = (
     ": Failed to open file",
     ": File path check failure:",
@@ -75,6 +81,27 @@ def communicate_with_cancel_check(
     """
     stdout_parts: list[str] = []
     stderr_parts: list[str] = []
+    stdout_total = 0
+    stderr_total = 0
+
+    def _append(parts: list[str], total: int, chunk: str, stream_name: str) -> int:
+        if not chunk:
+            return total
+        if total >= MAX_ACCUMULATED_BYTES:
+            return total
+        remaining = MAX_ACCUMULATED_BYTES - total
+        if len(chunk) <= remaining:
+            parts.append(chunk)
+            return total + len(chunk)
+        # Truncation point — keep marker so parsers see the boundary.
+        parts.append(chunk[:remaining])
+        parts.append(f"\n[{stream_name} truncated at {MAX_ACCUMULATED_BYTES} bytes]\n")
+        logger.warning(
+            "Subprocess %s exceeded %d bytes; truncating accumulated buffer",
+            stream_name,
+            MAX_ACCUMULATED_BYTES,
+        )
+        return MAX_ACCUMULATED_BYTES
 
     while True:
         if is_cancelled():
@@ -82,8 +109,8 @@ def communicate_with_cancel_check(
             try:
                 process.terminate()
                 stdout, stderr = process.communicate(timeout=2.0)
-                stdout_parts.append(stdout or "")
-                stderr_parts.append(stderr or "")
+                stdout_total = _append(stdout_parts, stdout_total, stdout or "", "stdout")
+                stderr_total = _append(stderr_parts, stderr_total, stderr or "", "stderr")
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
@@ -91,8 +118,8 @@ def communicate_with_cancel_check(
 
         try:
             stdout, stderr = process.communicate(timeout=0.5)
-            stdout_parts.append(stdout or "")
-            stderr_parts.append(stderr or "")
+            stdout_total = _append(stdout_parts, stdout_total, stdout or "", "stdout")
+            stderr_total = _append(stderr_parts, stderr_total, stderr or "", "stderr")
             return "".join(stdout_parts), "".join(stderr_parts), False
         except subprocess.TimeoutExpired:
             continue  # Loop again, check cancel flag
@@ -136,11 +163,31 @@ def stream_process_output(
     """
     stdout_parts: list[str] = []
     stderr_parts: list[str] = []
+    stdout_total = 0
+    stderr_total = 0
 
     if process.stdout is None or process.stderr is None:
         # Fallback to blocking communicate if pipes not available
         logger.warning("stream_process_output called without stdout/stderr pipes")
         return communicate_with_cancel_check(process, is_cancelled)
+
+    def _append(parts: list[str], total: int, chunk: str, stream_name: str) -> int:
+        if not chunk:
+            return total
+        if total >= MAX_ACCUMULATED_BYTES:
+            return total
+        remaining = MAX_ACCUMULATED_BYTES - total
+        if len(chunk) <= remaining:
+            parts.append(chunk)
+            return total + len(chunk)
+        parts.append(chunk[:remaining])
+        parts.append(f"\n[{stream_name} truncated at {MAX_ACCUMULATED_BYTES} bytes]\n")
+        logger.warning(
+            "Subprocess %s exceeded %d bytes; truncating accumulated buffer",
+            stream_name,
+            MAX_ACCUMULATED_BYTES,
+        )
+        return MAX_ACCUMULATED_BYTES
 
     # Get file descriptor for stdout
     stdout_fd = process.stdout.fileno()
@@ -158,18 +205,28 @@ def stream_process_output(
                     process.wait()
                 # Drain remaining output via os.read() to avoid mixing
                 # with the TextIOWrapper used by process.communicate()
-                for fd, parts in [
-                    (stdout_fd, stdout_parts),
-                    (process.stderr.fileno(), stderr_parts),
+                for fd, parts, stream_name in [
+                    (stdout_fd, stdout_parts, "stdout"),
+                    (process.stderr.fileno(), stderr_parts, "stderr"),
                 ]:
+                    local_total = stdout_total if stream_name == "stdout" else stderr_total
                     while True:
                         try:
                             raw = os.read(fd, 4096)
                             if not raw:
                                 break
-                            parts.append(raw.decode("utf-8", errors="replace"))
+                            local_total = _append(
+                                parts,
+                                local_total,
+                                raw.decode("utf-8", errors="replace"),
+                                stream_name,
+                            )
                         except OSError:
                             break
+                    if stream_name == "stdout":
+                        stdout_total = local_total
+                    else:
+                        stderr_total = local_total
                 return "".join(stdout_parts), "".join(stderr_parts), True
 
             # Check if process has finished
@@ -205,13 +262,13 @@ def stream_process_output(
                     for line in lines:
                         if line:  # Skip empty lines from split
                             on_line(line)
-                    stdout_parts.append(data)
+                    stdout_total = _append(stdout_parts, stdout_total, data, "stdout")
                 elif incomplete_line:
                     # Process the final incomplete line
                     on_line(incomplete_line)
-                    stdout_parts.append(incomplete_line)
+                    stdout_total = _append(stdout_parts, stdout_total, incomplete_line, "stdout")
                 if remaining_stderr:
-                    stderr_parts.append(remaining_stderr)
+                    stderr_total = _append(stderr_parts, stderr_total, remaining_stderr, "stderr")
                 break
 
             # Use select to wait for data with timeout
@@ -229,8 +286,8 @@ def stream_process_output(
 
                 chunk = raw_bytes.decode("utf-8", errors="replace")
 
-                # Accumulate for final parsing
-                stdout_parts.append(chunk)
+                # Accumulate for final parsing (capped to avoid memory exhaustion)
+                stdout_total = _append(stdout_parts, stdout_total, chunk, "stdout")
 
                 # Incomplete line handling: Buffer partial lines until newline arrives
                 # - incomplete_line holds text from previous read that didn't end with \n
@@ -255,9 +312,9 @@ def stream_process_output(
         try:
             remaining_stdout, remaining_stderr = process.communicate(timeout=2.0)
             if remaining_stdout:
-                stdout_parts.append(remaining_stdout)
+                stdout_total = _append(stdout_parts, stdout_total, remaining_stdout, "stdout")
             if remaining_stderr:
-                stderr_parts.append(remaining_stderr)
+                stderr_total = _append(stderr_parts, stderr_total, remaining_stderr, "stderr")
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()

@@ -412,7 +412,11 @@ class TrayService:
         parameters: GLib.Variant,
         invocation: Gio.DBusMethodInvocation,
     ) -> None:
-        """Handle D-Bus method calls for org.kde.StatusNotifierItem."""
+        # Threat model: SNI is a same-session protocol — the DE's taskbar
+        # widget must be able to call Activate, so we cannot restrict by
+        # sender. All handlers below are limited to benign UI events
+        # (show/hide window) and must never be given destructive side effects
+        # without an additional trust boundary.
         logger.debug(f"Method call: {method_name} from {sender}")
 
         if method_name == "Activate":
@@ -729,6 +733,11 @@ class TrayService:
         self._loop.run()
         logger.info("GLib main loop ended")
 
+    # Maximum length (bytes) of a single IPC command line. The parent process
+    # sends short JSON records; anything larger is either a bug or a hostile
+    # input and must not be parsed.
+    _MAX_IPC_LINE_BYTES = 64 * 1024
+
     def _read_stdin(self) -> None:
         """Read commands from stdin in a background thread."""
         try:
@@ -736,15 +745,29 @@ class TrayService:
                 if not self._running:
                     break
 
+                if len(line) > self._MAX_IPC_LINE_BYTES:
+                    logger.error(
+                        "Dropping IPC line of %d bytes (cap %d)",
+                        len(line),
+                        self._MAX_IPC_LINE_BYTES,
+                    )
+                    continue
+
                 line = line.strip()
                 if not line:
                     continue
 
                 try:
                     command = json.loads(line)
-                    self.handle_command(command)
                 except json.JSONDecodeError as e:
                     logger.error(f"Invalid JSON: {e}")
+                    continue
+
+                if not isinstance(command, dict):
+                    logger.error("Dropping IPC command: not a JSON object")
+                    continue
+
+                self.handle_command(command)
 
         except Exception as e:
             logger.error(f"Error reading stdin: {e}")

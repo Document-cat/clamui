@@ -214,7 +214,14 @@ class DaemonScanner:
             # clamdscan only emits per-file output with --file-list, not when
             # scanning a directory (which produces a single summary line)
             if use_file_list and file_paths:
-                fd, file_list_path = tempfile.mkstemp(prefix="clamui_filelist_", suffix=".txt")
+                # Prefer $XDG_RUNTIME_DIR (per-user, mode 0o700) over the default
+                # /tmp so the file-list isn't exposed to same-user processes even
+                # transiently. Falls back to the system temp if unavailable.
+                runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+                tmp_dir = runtime_dir if runtime_dir and os.path.isdir(runtime_dir) else None
+                fd, file_list_path = tempfile.mkstemp(
+                    prefix="clamui_filelist_", suffix=".txt", dir=tmp_dir
+                )
                 os.fchmod(fd, 0o600)
                 with os.fdopen(fd, "w") as f:
                     f.write("\n".join(sanitize_surrogate_path(p) for p in file_paths))

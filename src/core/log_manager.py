@@ -137,8 +137,8 @@ import io
 import json
 import logging
 import os
-import random
 import re
+import secrets
 import subprocess
 import tempfile
 import threading
@@ -953,8 +953,9 @@ class LogManager:
             # If we have many entries, check a sample; otherwise check all
             entries_to_check = index_entries
             if len(index_entries) > 50:
-                # Sample 50 entries for large indices
-                entries_to_check = random.sample(index_entries, 50)
+                # Sample 50 entries for large indices. Use a CSPRNG so an
+                # attacker cannot predict which entries are verified.
+                entries_to_check = secrets.SystemRandom().sample(index_entries, 50)
 
             # Use set membership for O(1) lookup instead of exists() syscalls
             missing_count = sum(

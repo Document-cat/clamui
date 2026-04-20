@@ -24,6 +24,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+import certifi
 import requests
 
 from .i18n import _
@@ -135,6 +136,11 @@ class VirusTotalClient:
         """Get or create a requests session with API key header."""
         if self._session is None:
             self._session = requests.Session()
+            # Pin TLS verification to the bundled CA store and refuse to honour
+            # REQUESTS_CA_BUNDLE / HTTP(S)_PROXY env vars so a local attacker
+            # cannot silently MITM the VirusTotal connection.
+            self._session.verify = certifi.where()
+            self._session.trust_env = False
             if self._api_key:
                 self._session.headers["x-apikey"] = self._api_key
         return self._session

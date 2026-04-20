@@ -112,16 +112,27 @@ def set_api_key(
             logger.info("Stored VirusTotal API key in keyring")
             return True, None
         except Exception as e:
-            logger.warning(f"Failed to store in keyring: {e}, using settings fallback")
+            logger.warning(f"Failed to store in keyring: {e}, considering settings fallback")
 
-    # Fall back to settings
+    # Keyring unavailable — only persist plaintext to settings if the user has
+    # explicitly opted in, since settings.json is readable by any process
+    # running as the same user (backup tools, sync clients, later compromise).
     if settings_manager is None:
         from .settings_manager import SettingsManager
 
         settings_manager = SettingsManager()
 
+    if not settings_manager.get("allow_plaintext_api_key_fallback"):
+        logger.warning(
+            "Keyring unavailable and plaintext fallback disabled — refusing to store API key"
+        )
+        return False, _(
+            "System keyring is unavailable. To store the API key without a keyring, "
+            "enable the plaintext fallback in preferences (less secure)."
+        )
+
     if settings_manager.set("virustotal_api_key", api_key):
-        logger.info("Stored VirusTotal API key in settings")
+        logger.info("Stored VirusTotal API key in settings (plaintext fallback)")
         return True, _("Stored in settings file (keyring unavailable — less secure)")
 
     return False, _("Failed to save API key to settings")

@@ -739,7 +739,7 @@ class Scheduler:
         """
         # Build command with options
         # Use shlex.quote() to prevent command injection via malicious paths
-        exec_cmd = cli_path
+        exec_cmd = shlex.quote(cli_path)
         if skip_on_battery:
             exec_cmd += " --skip-on-battery"
         if auto_quarantine:
@@ -810,7 +810,7 @@ WantedBy=timers.target
 
             # Build command
             # Use shlex.quote() to prevent command injection via malicious paths
-            cron_cmd = cli_path
+            cron_cmd = shlex.quote(cli_path)
             if skip_on_battery:
                 cron_cmd += " --skip-on-battery"
             if auto_quarantine:
