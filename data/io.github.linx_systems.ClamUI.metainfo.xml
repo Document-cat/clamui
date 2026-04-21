@@ -31,35 +31,39 @@
     <screenshots>
         <screenshot type="default">
             <caption>Main application window</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/main_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/main_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Scan results display</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/main_view_with_scan_result.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/main_view_with_scan_result.png</image>
         </screenshot>
         <screenshot>
             <caption>Analysis view</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/analysis_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/analysis_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Components view</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/components_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/components_view.png</image>
+        </screenshot>
+        <screenshot>
+            <caption>System security audit</caption>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/audit_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Configuration settings</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/config_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/config_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Scan history</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/history_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/history_view.png</image>
         </screenshot>
         <screenshot>
             <caption>Profile management</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/profile_management.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/profile_management.png</image>
         </screenshot>
         <screenshot>
             <caption>Quarantine management</caption>
-            <image>https://github.com/linx-systems/clamui/raw/v0.1.6/screenshots/quarantine_view.png</image>
+            <image>https://github.com/linx-systems/clamui/raw/v0.1.7/screenshots/quarantine_view.png</image>
         </screenshot>
     </screenshots>
 
@@ -96,22 +100,25 @@
     </keywords>
 
     <releases>
-        <release version="0.1.7" date="2026-04-20">
+        <release version="0.1.7" date="2026-04-21">
             <description>
                 <p>System security audit, Flatpak hardening, AppImage delta updates, and tray reliability</p>
                 <ul>
                     <li>Add system security audit dashboard with firewall, MAC, SSH, rootkit, and ClamAV health checks</li>
                     <li>Notify when the security audit finds issues and add info links for each check</li>
                     <li>Add AppImage delta update support via zsync</li>
-                    <li>Add French and Italian translations</li>
+                    <li>Add French and Italian translations and refresh German and Chinese (zh_CN) strings</li>
+                    <li>Add an in-app language override so users can pick the interface language regardless of system locale</li>
+                    <li>Address OWASP audit findings across scanner, updater, and logging paths</li>
                     <li>Improve scan detail UX and GUI shutdown behavior</li>
                     <li>Fix Plasma tray watcher registration timing and StartupWMClass for window matching</li>
+                    <li>Fix Fedora clamd detection and status checks</li>
                     <li>Make folder opening, file dialogs, and app launching Flatpak-aware</li>
                     <li>Handle non-UTF-8 filenames and filter non-fatal LibClamAV errors during scans</li>
                     <li>Escape Pango markup in widget titles and clamp scan progress overflow</li>
                     <li>Defer panel data loading and share LogManager across views for faster startup</li>
                     <li>Restart ClamAV services after applying config changes and repair config duplication</li>
-                    <li>Refresh cryptography and certifi pins</li>
+                    <li>Refresh cryptography, certifi, and pytest pins (pytest &gt;=9.0.3 for CVE-2025-71176)</li>
                 </ul>
             </description>
         </release>
