@@ -792,6 +792,17 @@ class SecureFileHandler:
                     error_message=f"Destination file already exists: {original_path}",
                 )
 
+            # Security: Check for symlink attack (TOCTOU mitigation)
+            if destination_obj.is_symlink():
+                return FileOperationResult(
+                    status=FileOperationStatus.ERROR,
+                    source_path=quarantine_path,
+                    destination_path=original_path,
+                    file_size=file_size,
+                    file_hash=file_hash or "",
+                    error_message=f"Security: destination is a symlink, possible attack: {original_path}",
+                )
+
             try:
                 # Atomic move operation
                 shutil.move(quarantine_path, original_path)

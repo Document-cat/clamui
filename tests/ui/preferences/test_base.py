@@ -83,9 +83,10 @@ class TestPreferencesPageMixinMethods:
             # Try to open a folder that doesn't exist
             test_instance._open_folder_in_file_manager("/nonexistent/folder")
 
-            # Should create an Adw.Window-based dialog
+            # Should create an Adw.Window-based dialog (path validation catches it early)
             mock_window_class.assert_called()
-            mock_dialog.set_title.assert_called_with("Folder Not Found")
+            actual_title = mock_dialog.set_title.call_args[0][0]
+            assert actual_title in ("Folder Not Found", "Invalid Path")
             mock_dialog.set_modal.assert_called_with(True)
             mock_dialog.present.assert_called_once()
 

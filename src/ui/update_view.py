@@ -4,6 +4,7 @@ Database update interface component for ClamUI with update button, progress disp
 """
 
 import threading
+import logging
 
 import gi
 
@@ -23,6 +24,8 @@ from ..core.utils import check_freshclam_installed
 from .compat import create_banner
 from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import StatusLevel, set_status_class
+
+logger = logging.getLogger(__name__)
 
 
 class UpdateView(Gtk.Box):
@@ -314,6 +317,10 @@ class UpdateView(Gtk.Box):
             GLib.idle_add(self._apply_freshclam_status, result)
         except Exception:
             # If subprocess calls fail, schedule a fallback UI update
+            logger.warning(
+                "Failed to check freshclam status; falling back to default UI state",
+                exc_info=True,
+            )
             result = {
                 "is_installed": False,
                 "version_or_error": _("Error checking freshclam status"),
@@ -323,6 +330,10 @@ class UpdateView(Gtk.Box):
             try:
                 GLib.idle_add(self._apply_freshclam_status, result)
             except Exception:
+                logger.debug(
+                    "Skipping fallback freshclam UI update because the widget may be destroyed",
+                    exc_info=True,
+                )
                 return  # Widget may be destroyed; nothing to do
 
     def _apply_freshclam_status(self, result):
@@ -340,6 +351,10 @@ class UpdateView(Gtk.Box):
             if not self.get_mapped():
                 return False
         except Exception:
+            logger.debug(
+                "Skipping freshclam status update because the widget is unavailable",
+                exc_info=True,
+            )
             return False
 
         is_installed = result["is_installed"]

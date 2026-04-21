@@ -6,11 +6,17 @@ This CLI is intended to be invoked via pkexec by the GUI layer. It copies
 staged config files to their destination paths and normalizes permissions.
 """
 
+import logging
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from ..core.path_validation import validate_path
+
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_path_pairs(args: list[str]) -> list[tuple[Path, Path]]:
@@ -93,8 +99,24 @@ def _apply_config_file(source: Path, destination: Path) -> None:
     if not source.is_file():
         raise OSError(f"Staged path is not a file: {source}")
 
+    is_valid, error = validate_path(str(source))
+    if not is_valid:
+        logger.warning("Invalid source path for config apply: %s - %s", source, error)
+        raise ValueError(f"Invalid source path: {source}")
+
     _validate_destination(destination)
+
+    if destination.parent.is_symlink():
+        logger.warning("Destination parent is a symlink, skipping: %s", destination)
+        raise ValueError(f"Invalid destination path: {destination}")
+
     destination.parent.mkdir(parents=True, exist_ok=True)
+
+    is_valid, error = validate_path(str(destination.parent))
+    if not is_valid:
+        logger.warning("Invalid destination path for config apply: %s - %s", destination, error)
+        raise ValueError(f"Invalid destination path: {destination}")
+
     shutil.copy2(source, destination)
     os.chmod(destination, 0o644)
 

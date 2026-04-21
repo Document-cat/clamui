@@ -176,7 +176,14 @@ class SettingsManager:
                     dir=self._config_dir,
                 )
                 try:
-                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    try:
+                        f = os.fdopen(fd, "w", encoding="utf-8")
+                    except Exception:
+                        with contextlib.suppress(OSError):
+                            os.close(fd)
+                        raise
+
+                    with f:
                         json.dump(self._settings, f, indent=2)
 
                     # Atomic rename

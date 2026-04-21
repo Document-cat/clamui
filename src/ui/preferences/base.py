@@ -20,6 +20,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
 from ...core.i18n import _
+from ...core.path_validation import validate_path
 from ..compat import (
     create_entry_row,
     create_toolbar_view,
@@ -527,6 +528,14 @@ class PreferencesPageMixin:
         Args:
             folder_path: The folder path to open
         """
+        is_valid, error = validate_path(folder_path)
+        if not is_valid:
+            self._show_simple_dialog(
+                _("Invalid Path"),
+                error or _("The path is not valid."),
+            )
+            return
+
         from ...core.flatpak import is_flatpak
 
         if is_flatpak():
@@ -548,6 +557,7 @@ class PreferencesPageMixin:
                     ["flatpak-spawn", "--host", "xdg-open", folder_path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
             except Exception as e:
                 self._show_simple_dialog(
@@ -566,6 +576,7 @@ class PreferencesPageMixin:
                     ["xdg-open", folder_path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
             except Exception as e:
                 self._show_simple_dialog(

@@ -123,6 +123,12 @@ class QuarantineView(Gtk.Box):
         # Load entries on startup asynchronously
         GLib.idle_add(self._load_entries_async)
 
+    def do_unmap(self):
+        if self._search_timeout_id is not None:
+            GLib.source_remove(self._search_timeout_id)
+            self._search_timeout_id = None
+        Gtk.Box.do_unmap(self)
+
     def _setup_ui(self):
         """Set up the quarantine view UI layout."""
         self.set_margin_top(24)

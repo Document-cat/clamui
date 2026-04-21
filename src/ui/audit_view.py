@@ -822,7 +822,11 @@ class AuditView(Gtk.Box):
         button.set_icon_name(resolve_icon_name("object-select-symbolic"))
         GLib.timeout_add(
             1500,
-            lambda: button.set_icon_name(resolve_icon_name("edit-copy-symbolic")),
+            lambda: (
+                button.set_icon_name(resolve_icon_name("edit-copy-symbolic"))
+                if not self._destroyed
+                else None
+            ),
         )
 
     def _on_run_lynis(self, button: Gtk.Button):

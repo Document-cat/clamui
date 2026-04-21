@@ -801,12 +801,19 @@ class LogManager:
 
         fd, temp_path = tempfile.mkstemp(prefix="log_privacy_", dir=self._log_dir)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
+            try:
+                f = os.fdopen(fd, "w", encoding="utf-8")
+            except Exception:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+
+            with f:
                 f.write(str(LOG_PRIVACY_VERSION))
 
             Path(temp_path).replace(self._privacy_state_path)
             self._privacy_state_path.chmod(0o600)
-        except OSError:
+        except Exception:
             with contextlib.suppress(OSError):
                 Path(temp_path).unlink(missing_ok=True)
 
@@ -897,7 +904,14 @@ class LogManager:
                 dir=self._log_dir,
             )
             try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                try:
+                    f = os.fdopen(fd, "w", encoding="utf-8")
+                except Exception:
+                    with contextlib.suppress(OSError):
+                        os.close(fd)
+                    raise
+
+                with f:
                     json.dump(index_data, f, indent=2)
 
                 # Atomic rename
@@ -1059,7 +1073,14 @@ class LogManager:
             dir=self._log_dir,
         )
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
+            try:
+                f = os.fdopen(fd, "w", encoding="utf-8")
+            except Exception:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+
+            with f:
                 json.dump(data, f, indent=2)
 
             Path(temp_path).replace(log_file)
@@ -1836,7 +1857,14 @@ class LogManager:
             )
             try:
                 # Write content to temp file
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                try:
+                    f = os.fdopen(fd, "w", encoding="utf-8")
+                except Exception:
+                    with contextlib.suppress(OSError):
+                        os.close(fd)
+                    raise
+
+                with f:
                     f.write(content)
 
                 # Atomic rename (replace target file if it exists)

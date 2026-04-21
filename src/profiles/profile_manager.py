@@ -950,7 +950,14 @@ class ProfileManager:
             dir=export_path.parent,
         )
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
+            try:
+                f = os.fdopen(fd, "w", encoding="utf-8")
+            except Exception:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+
+            with f:
                 json.dump(export_data, f, indent=2)
 
             # Atomic rename

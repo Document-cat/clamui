@@ -378,10 +378,14 @@ class ComponentsView(Gtk.Box):
         clipboard = button.get_clipboard()
         clipboard.set(command)
 
-        # Visual feedback - change icon temporarily
         button.set_icon_name(resolve_icon_name("object-select-symbolic"))
         GLib.timeout_add(
-            1500, lambda: button.set_icon_name(resolve_icon_name("edit-copy-symbolic"))
+            1500,
+            lambda: (
+                button.set_icon_name(resolve_icon_name("edit-copy-symbolic"))
+                if not self._destroyed
+                else None
+            ),
         )
 
     def _add_flatpak_bundled_message(self, content_box: Gtk.Box, component_id: str):

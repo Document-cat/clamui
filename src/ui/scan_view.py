@@ -1378,6 +1378,18 @@ class ScanView(Gtk.Box):
             self._threat_group.set_visible(False)
         self._live_threat_count = 0
 
+    def do_unmap(self):
+        """
+        Handle widget unmapping (being hidden or removed from the widget tree).
+
+        Cleans up any active GLib timeout sources to prevent callbacks from
+        firing on a destroyed widget.
+        """
+        if self._pulse_timeout_id is not None:
+            GLib.source_remove(self._pulse_timeout_id)
+            self._pulse_timeout_id = None
+        Gtk.Box.do_unmap(self)
+
     def _on_parent_changed(self, widget, pspec):
         """
         Handle parent changes for visibility tracking.

@@ -109,7 +109,14 @@ class ProfileStorage:
                     dir=self._storage_path.parent,
                 )
                 try:
-                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    try:
+                        f = os.fdopen(fd, "w", encoding="utf-8")
+                    except Exception:
+                        with contextlib.suppress(OSError):
+                            os.close(fd)
+                        raise
+
+                    with f:
                         json.dump(data, f, indent=2)
 
                     # Atomic rename
@@ -126,6 +133,11 @@ class ProfileStorage:
 
             except Exception:
                 # Catch all exceptions (including OSError, PermissionError)
+                logger.warning(
+                    "Failed to save scan profiles to %s",
+                    self._storage_path,
+                    exc_info=True,
+                )
                 return False
 
     def _backup_corrupted_file(self) -> None:

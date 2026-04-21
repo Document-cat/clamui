@@ -5,6 +5,7 @@ Provides faster scanning by leveraging the ClamAV daemon's in-memory database.
 """
 
 import fnmatch
+import contextlib
 import logging
 import os
 import subprocess
@@ -223,7 +224,14 @@ class DaemonScanner:
                     prefix="clamui_filelist_", suffix=".txt", dir=tmp_dir
                 )
                 os.fchmod(fd, 0o600)
-                with os.fdopen(fd, "w") as f:
+                try:
+                    f = os.fdopen(fd, "w")
+                except Exception:
+                    with contextlib.suppress(OSError):
+                        os.close(fd)
+                    raise
+
+                with f:
                     f.write("\n".join(sanitize_surrogate_path(p) for p in file_paths))
 
             # Build clamdscan command (use verbose mode if progress callback provided)

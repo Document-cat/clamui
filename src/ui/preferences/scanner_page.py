@@ -523,6 +523,7 @@ class ScannerPage(PreferencesPageMixin):
                 ["xdg-open", str(docs_path)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
         except Exception as e:
             # Show error dialog if opening fails
