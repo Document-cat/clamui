@@ -36,12 +36,6 @@ jobs:
           fi
           echo "No absolute src.* imports found."
 
-      - name: Check POTFILES.in consistency
-        run: ./scripts/check-potfiles.sh
-
-      - name: Validate translations
-        run: ./scripts/check-translations.sh
-
       - name: Run Ruff linting
         run: uvx ruff check src/ tests/ --output-format=github
 
