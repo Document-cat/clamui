@@ -12,6 +12,7 @@ from src.core.system_audit import (
     AuditSectionResult,
     AuditStatus,
     _check_systemd_service,
+    _check_ufw_enabled,
     _parse_cvd_age,
     check_auto_updates,
     check_clamav_health,
@@ -22,7 +23,6 @@ from src.core.system_audit import (
     run_lynis_audit,
     run_rootkit_check,
 )
-
 
 # =============================================================================
 # Dataclass Tests
@@ -123,20 +123,28 @@ class TestAuditReport:
         assert report.summary == {}
 
     def test_summary_counts(self):
-        report = AuditReport(sections=[
-            AuditSectionResult(
-                AuditCategory.FIREWALL, "FW", "x",
-                [AuditCheckResult("A", AuditStatus.PASS, "ok")],
-            ),
-            AuditSectionResult(
-                AuditCategory.SSH_HARDENING, "SSH", "x",
-                [AuditCheckResult("B", AuditStatus.FAIL, "bad")],
-            ),
-            AuditSectionResult(
-                AuditCategory.MAC_FRAMEWORK, "MAC", "x",
-                [AuditCheckResult("C", AuditStatus.PASS, "ok")],
-            ),
-        ])
+        report = AuditReport(
+            sections=[
+                AuditSectionResult(
+                    AuditCategory.FIREWALL,
+                    "FW",
+                    "x",
+                    [AuditCheckResult("A", AuditStatus.PASS, "ok")],
+                ),
+                AuditSectionResult(
+                    AuditCategory.SSH_HARDENING,
+                    "SSH",
+                    "x",
+                    [AuditCheckResult("B", AuditStatus.FAIL, "bad")],
+                ),
+                AuditSectionResult(
+                    AuditCategory.MAC_FRAMEWORK,
+                    "MAC",
+                    "x",
+                    [AuditCheckResult("C", AuditStatus.PASS, "ok")],
+                ),
+            ]
+        )
         summary = report.summary
         assert summary[AuditStatus.PASS] == 2
         assert summary[AuditStatus.FAIL] == 1
@@ -243,8 +251,8 @@ class TestCheckClamavHealth:
         # Simulate: clamav-daemon active on first call,
         # clamav-freshclam active on fourth call
         mock_systemd.side_effect = [
-            (True, "active"),   # clamav-daemon
-            (True, "active"),   # clamav-freshclam
+            (True, "active"),  # clamav-daemon
+            (True, "active"),  # clamav-freshclam
         ]
 
         with patch("src.core.system_audit.check_database_available") as mock_db:
@@ -257,6 +265,28 @@ class TestCheckClamavHealth:
 
 class TestCheckFirewall:
     """Tests for check_firewall function."""
+
+    @patch("src.core.system_audit._run_command")
+    def test_ufw_enabled_uses_status_command(self, mock_run_cmd):
+        """UFW enabled detection should use the host CLI status when available."""
+        mock_run_cmd.return_value = (0, "Status: active", "")
+
+        assert _check_ufw_enabled() is True
+        mock_run_cmd.assert_called_once_with(["ufw", "status"])
+
+    @patch("src.core.system_audit.is_flatpak", return_value=True)
+    @patch("src.core.system_audit._run_command")
+    def test_ufw_enabled_falls_back_to_config(self, mock_run_cmd, mock_is_flatpak):
+        """If ufw status cannot be queried, fall back to host config parsing."""
+        mock_run_cmd.side_effect = [
+            (-1, "", "command not found"),
+            (0, "# comment\nENABLED=yes\n", ""),
+        ]
+
+        assert _check_ufw_enabled() is True
+        assert mock_run_cmd.call_args_list[0].args[0] == ["ufw", "status"]
+        assert mock_run_cmd.call_args_list[1].args[0] == ["cat", "/etc/ufw/ufw.conf"]
+        mock_is_flatpak.assert_called_once()
 
     @patch("src.core.system_audit._check_firewall_gui")
     @patch("src.core.system_audit._check_open_ports")
@@ -271,10 +301,7 @@ class TestCheckFirewall:
             result = check_firewall()
 
         assert result.category == AuditCategory.FIREWALL
-        assert any(
-            c.status == AuditStatus.PASS and "UFW" in c.name
-            for c in result.checks
-        )
+        assert any(c.status == AuditStatus.PASS and "UFW" in c.name for c in result.checks)
 
     @patch("src.core.system_audit._check_firewall_gui")
     @patch("src.core.system_audit._check_open_ports")
@@ -297,9 +324,7 @@ class TestCheckMacFramework:
     @patch("src.core.system_audit._check_selinux")
     @patch("src.core.system_audit._check_apparmor")
     def test_apparmor_enabled(self, mock_apparmor, mock_selinux):
-        mock_apparmor.return_value = AuditCheckResult(
-            "AppArmor", AuditStatus.PASS, "enabled"
-        )
+        mock_apparmor.return_value = AuditCheckResult("AppArmor", AuditStatus.PASS, "enabled")
         mock_selinux.return_value = None
         result = check_mac_framework()
         assert any(c.status == AuditStatus.PASS for c in result.checks)
@@ -362,7 +387,7 @@ class TestCheckIntrustionDetection:
     @patch("src.core.system_audit._check_systemd_service")
     def test_fail2ban_active(self, mock_systemd):
         mock_systemd.side_effect = [
-            (True, "active"),   # fail2ban
+            (True, "active"),  # fail2ban
             (False, "inactive"),  # crowdsec
         ]
         result = check_intrusion_detection()

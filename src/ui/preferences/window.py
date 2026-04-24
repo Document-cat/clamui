@@ -170,12 +170,18 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
         self._freshclam_load_error = None
         self._clamd_load_error = None
 
-        # Default config file paths - use Flatpak-specific paths when running in Flatpak
+        # Default config file paths. In Flatpak, prefer the saved or detected
+        # host freshclam.conf so the UI reflects the system service config.
+        # Fall back to the generated sandbox config only when no host config is
+        # available, because bundled freshclam still needs a writable config.
         if is_flatpak():
-            # In Flatpak, use the generated config in user's config directory
-            logger.info("Running in Flatpak, using Flatpak-specific config paths")
-            flatpak_config = get_freshclam_config_path()
-            if flatpak_config:
+            logger.info("Running in Flatpak, resolving host-aware config paths")
+            detected = resolve_freshclam_conf_path(self._settings_manager)
+            if detected:
+                logger.info("Using host freshclam config: %s", detected)
+                self._freshclam_conf_path = detected
+            else:
+                flatpak_config = get_freshclam_config_path()
                 # Ensure the config file exists (generates it if needed)
                 generated_path = ensure_freshclam_config()
                 if generated_path:
@@ -188,18 +194,15 @@ class PreferencesWindow(Adw.Window, PreferencesPageMixin):
                         "Check disk space and permissions in ~/.var/app/io.github.linx_systems.ClamUI/"
                     )
                     # Use fallback path, but mark that generation failed
-                    self._freshclam_conf_path = str(flatpak_config)
+                    self._freshclam_conf_path = (
+                        str(flatpak_config) if flatpak_config else "/etc/clamav/freshclam.conf"
+                    )
                     self._freshclam_load_error = (
                         "Failed to generate Flatpak configuration. "
                         "This may be due to insufficient disk space or permissions."
                     )
-            else:
-                logger.warning(
-                    "Could not determine Flatpak config path, falling back to auto-detect"
-                )
-                detected = resolve_freshclam_conf_path(self._settings_manager)
-                self._freshclam_conf_path = detected or "/etc/clamav/freshclam.conf"
-                if not detected:
+                if not flatpak_config:
+                    logger.warning("Could not determine Flatpak config path")
                     self._freshclam_load_error = "Could not determine Flatpak configuration path"
             # clamd.conf is typically not used in Flatpak (daemon runs on host)
             # but auto-detect the host path for config editing

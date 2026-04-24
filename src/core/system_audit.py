@@ -592,8 +592,30 @@ def _check_firewall_gui(section: AuditSectionResult) -> None:
     )
 
 
+def _check_ufw_status_enabled() -> bool | None:
+    """Check UFW state using the ufw CLI, which reflects host firewall state."""
+    rc, stdout, _stderr = _run_command(["ufw", "status"])
+    if rc != 0 or not stdout:
+        return None
+
+    for line in stdout.splitlines():
+        stripped = line.strip().lower()
+        if stripped.startswith("status:"):
+            status = stripped.split(":", 1)[1].strip()
+            if status.startswith("active"):
+                return True
+            if status.startswith("inactive"):
+                return False
+
+    return None
+
+
 def _check_ufw_enabled() -> bool:
-    """Check if UFW is enabled by parsing /etc/ufw/ufw.conf."""
+    """Check if UFW is enabled, preferring host CLI status over config parsing."""
+    status_enabled = _check_ufw_status_enabled()
+    if status_enabled is not None:
+        return status_enabled
+
     try:
         if is_flatpak():
             rc, stdout, _stderr = _run_command(["cat", "/etc/ufw/ufw.conf"])
