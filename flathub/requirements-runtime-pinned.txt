@@ -4,7 +4,7 @@
 
 # Main dependencies
 psutil==7.2.2
-matplotlib==3.10.8
+matplotlib==3.10.9
 requests==2.33.1
 keyring==25.7.0
 
@@ -21,9 +21,9 @@ python-dateutil==2.9.0.post0
 six==1.17.0
 
 # requests dependencies
-certifi==2026.1.4
+certifi==2026.4.22
 charset-normalizer==3.4.7
-idna==3.11
+idna==3.13
 urllib3==2.6.3
 
 # keyring dependencies

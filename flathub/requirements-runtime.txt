@@ -4,8 +4,8 @@
 # Note: PyGObject and pycairo are provided by org.gnome.Platform runtime
 # Note: pygobject-stubs are type stubs, not needed at runtime
 psutil>=5.9.0
-matplotlib>=3.8.0
+matplotlib>=3.10.9
 requests>=2.32.4
 urllib3>=2.6.3
-certifi>=2026.2.25
+certifi>=2026.4.22
 keyring>=25.0.0
