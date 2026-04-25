@@ -880,6 +880,13 @@ def _path_needs_elevation(file_path: Path) -> bool:
     return False
 
 
+def _running_in_flatpak() -> bool:
+    """Return whether this process is running inside a Flatpak sandbox."""
+    from .flatpak import is_flatpak
+
+    return is_flatpak()
+
+
 def _write_config_direct(file_path: Path, content: str) -> tuple[bool, str | None]:
     """
     Write config content directly without privilege elevation.
@@ -929,9 +936,7 @@ def _get_host_visible_tmpdir() -> str | None:
     Returns:
         A host-visible temp directory path, or None outside Flatpak.
     """
-    from .flatpak import is_flatpak
-
-    if not is_flatpak():
+    if not _running_in_flatpak():
         return None
 
     cache_dir = os.environ.get("XDG_CACHE_HOME")
@@ -967,8 +972,6 @@ def write_configs_with_elevation(configs: list[ClamAVConfig]) -> tuple[bool, str
     """
     if not configs:
         return (True, None)
-
-    from .flatpak import is_flatpak
 
     try:
         pending_writes: list[tuple[Path, str]] = []
@@ -1015,7 +1018,7 @@ def write_configs_with_elevation(configs: list[ClamAVConfig]) -> tuple[bool, str
 
             # In Flatpak, pkexec must run on the host via flatpak-spawn
             # because setuid binaries can't escalate inside the sandbox.
-            use_host_spawn = is_flatpak()
+            use_host_spawn = _running_in_flatpak()
             prefix = ["flatpak-spawn", "--host"] if use_host_spawn else []
 
             helper_path = _get_privileged_writer_path()

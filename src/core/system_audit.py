@@ -30,7 +30,7 @@ from .clamav_detection import (
     check_clamd_connection,
     check_database_available,
 )
-from .flatpak import get_clamav_database_dir, get_clean_env, is_flatpak, wrap_host_command
+from .flatpak import get_clean_env, is_flatpak, wrap_host_command
 from .i18n import _
 from .sanitize import sanitize_log_line
 
@@ -267,12 +267,9 @@ def _parse_cvd_age(cvd_path: str) -> tuple[int | None, str | None]:
 def _find_daily_cvd_path() -> str | None:
     """Find the path to the daily.cvd or daily.cld database file."""
     if is_flatpak():
-        db_dir_path = get_clamav_database_dir()
-        if db_dir_path is None:
-            return None
-        db_dir = db_dir_path
-    else:
-        db_dir = Path("/var/lib/clamav")
+        return None
+
+    db_dir = Path("/var/lib/clamav")
 
     for ext in (".cvd", ".cld"):
         path = db_dir / f"daily{ext}"

@@ -18,10 +18,9 @@ from pathlib import Path
 from gi.repository import GLib
 
 from .flatpak import (
-    ensure_clamav_database_dir,
-    ensure_freshclam_config,
     get_clamav_database_dir,
     is_flatpak,
+    which_host_command,
 )
 from .i18n import _
 from .log_manager import LogEntry, LogManager
@@ -59,7 +58,7 @@ def get_pkexec_path() -> str | None:
         The full path to pkexec if found, None otherwise
     """
 
-    return shutil.which("pkexec")
+    return which_host_command("pkexec")
 
 
 class UpdateStatus(Enum):
@@ -167,10 +166,6 @@ class FreshclamUpdater:
             - NOT_FOUND: (NOT_FOUND, None)
             - UNKNOWN: (UNKNOWN, error_message)
         """
-        # Flatpak cannot reliably detect host systemd services
-        if is_flatpak():
-            return FreshclamServiceStatus.NOT_FOUND, None
-
         # Service names to check (in order of preference)
         service_names = ["clamav-freshclam.service", "freshclam.service"]
 
@@ -314,14 +309,12 @@ class FreshclamUpdater:
         """
         Check if a freshclam process is currently running.
 
-        Uses pidof to detect running freshclam instances. Skipped in Flatpak
-        (where freshclam runs on the host and pidof may not work).
+        Uses pidof to detect running freshclam instances. In Flatpak this runs
+        on the host via flatpak-spawn.
 
         Returns:
             Tuple of (is_running, pid_string_or_none)
         """
-        if is_flatpak():
-            return False, None
         try:
             pid_result = subprocess.run(
                 wrap_host_command(["pidof", "freshclam"]),
@@ -426,23 +419,22 @@ class FreshclamUpdater:
         if not force:
             return None
 
-        success, error, _ = self._backup_local_databases()
-        if not is_flatpak():
-            if not success:
-                logger.warning(
-                    "Could not backup databases in native mode "
-                    "(expected for root-owned directory): %s",
-                    error,
-                )
-                self._cleanup_backup()
+        if is_flatpak():
+            # Host ClamAV owns the database. The Flatpak force-update command
+            # performs host-side deletion through pkexec instead of touching
+            # legacy sandbox database files.
             return None
 
+        success, error, _ = self._backup_local_databases()
+
         if not success:
-            return self._create_result(
-                UpdateStatus.ERROR,
-                stderr=error or "",
-                error_message=error or _("Backup failed"),
+            logger.warning(
+                "Could not backup host databases before force update "
+                "(expected for root-owned directories): %s",
+                error,
             )
+            self._cleanup_backup()
+            return None
 
         success, error, deleted_count = self._delete_local_databases()
         if not success:
@@ -546,7 +538,7 @@ class FreshclamUpdater:
 
     def _run_manual_update(self, *, force: bool, start_time: float) -> UpdateResult:
         """Execute the manual freshclam path once preconditions have passed."""
-        flatpak_force = force and is_flatpak()
+        restore_local_backup = force and self._force_update_backup_dir is not None
         running_result = self._get_running_instance_result()
         if running_result is not None:
             return self._finish_update(running_result, start_time)
@@ -563,7 +555,7 @@ class FreshclamUpdater:
                     error_message=_("freshclam executable not found"),
                 ),
                 start_time,
-                restore_backup=flatpak_force,
+                restore_backup=restore_local_backup,
             )
         except PermissionError as e:
             return self._finish_update(
@@ -573,7 +565,7 @@ class FreshclamUpdater:
                     error_message=_("Permission denied: {error}").format(error=e),
                 ),
                 start_time,
-                restore_backup=flatpak_force,
+                restore_backup=restore_local_backup,
             )
         except Exception as e:
             return self._finish_update(
@@ -583,7 +575,7 @@ class FreshclamUpdater:
                     error_message=_("Update failed: {error}").format(error=e),
                 ),
                 start_time,
-                restore_backup=flatpak_force,
+                restore_backup=restore_local_backup,
             )
 
         if timed_out and not self._update_cancelled:
@@ -595,7 +587,7 @@ class FreshclamUpdater:
                     error_message=_("Update timed out after 10 minutes"),
                 ),
                 start_time,
-                restore_backup=force,
+                restore_backup=restore_local_backup,
             )
 
         if self._update_cancelled:
@@ -608,7 +600,7 @@ class FreshclamUpdater:
                     error_message=_("Update cancelled by user"),
                 ),
                 start_time,
-                restore_backup=flatpak_force,
+                restore_backup=restore_local_backup,
             )
 
         result = self._parse_results(stdout, stderr, exit_code)
@@ -616,7 +608,7 @@ class FreshclamUpdater:
         return self._finish_update(
             result,
             start_time,
-            restore_backup=flatpak_force and result.status == UpdateStatus.ERROR,
+            restore_backup=restore_local_backup and result.status == UpdateStatus.ERROR,
         )
 
     def update_sync(self, force: bool = False, prefer_service: bool = True) -> UpdateResult:
@@ -726,67 +718,39 @@ class FreshclamUpdater:
         Uses pkexec for privilege elevation since freshclam requires
         root access to update the ClamAV database in /var/lib/clamav/.
 
-        In Flatpak, databases are stored in user-writable directory so
-        no privilege elevation is needed.
-
         When running inside a Flatpak sandbox, the command is automatically
         wrapped with 'flatpak-spawn --host' to execute freshclam on the host system.
 
         Args:
-            force: If True and in native mode, delete databases before running
-                   freshclam (via pkexec shell script). In Flatpak, databases
-                   are deleted before this method is called.
+            force: If True, delete host databases before running freshclam
+                   (via pkexec shell script).
 
         Returns:
             List of command arguments (wrapped with flatpak-spawn if in Flatpak)
         """
         freshclam = get_freshclam_path() or "freshclam"
 
-        # In Flatpak, use user-writable database directory (no root needed)
-        if is_flatpak():
-            # Ensure the database directory exists
-            db_dir = ensure_clamav_database_dir()
-            logger.debug("Flatpak database directory: %s", db_dir)
-
-            # Generate config file with correct DatabaseDirectory
-            config_path = ensure_freshclam_config()
-            logger.debug("Flatpak config path: %s", config_path)
-
-            cmd = [freshclam]
-            if config_path is not None and config_path.exists():
-                cmd.extend(["--config-file", str(config_path)])
-            else:
-                # Config generation failed - log error but continue
-                # freshclam will fail with its own error message
-                logger.error(
-                    "Failed to generate freshclam config. Config path: %s, exists: %s",
-                    config_path,
-                    config_path.exists() if config_path else False,
-                )
+        pkexec = get_pkexec_path()
+        if pkexec:
+            if force:
+                # Force update: Delete databases first, then run freshclam.
+                # This all happens via pkexec with root privileges.
+                # freshclam is passed as $1 (positional arg) to avoid
+                # shell injection — the script string is a constant.
+                cmd = [
+                    pkexec,
+                    "sh",
+                    "-c",
+                    # Delete all ClamAV database files, then run freshclam
+                    'rm -f /var/lib/clamav/*.cvd /var/lib/clamav/*.cld /var/lib/clamav/*.cud 2>/dev/null; "$1" --verbose',
+                    "clamui-force-update",  # $0 (script name for error messages)
+                    freshclam,  # $1 (safe — not interpreted as shell syntax)
+                ]
+                return wrap_host_command(cmd)
+            cmd = [pkexec, freshclam]
         else:
-            # Native: Use pkexec for privilege elevation
-            pkexec = get_pkexec_path()
-            if pkexec:
-                if force:
-                    # Force update: Delete databases first, then run freshclam
-                    # This all happens via pkexec with root privileges
-                    # freshclam is passed as $1 (positional arg) to avoid
-                    # shell injection — the script string is a constant.
-                    cmd = [
-                        pkexec,
-                        "sh",
-                        "-c",
-                        # Delete all ClamAV database files, then run freshclam
-                        'rm -f /var/lib/clamav/*.cvd /var/lib/clamav/*.cld /var/lib/clamav/*.cud 2>/dev/null; "$1" --verbose',
-                        "clamui-force-update",  # $0 (script name for error messages)
-                        freshclam,  # $1 (safe — not interpreted as shell syntax)
-                    ]
-                    return wrap_host_command(cmd)
-                else:
-                    cmd = [pkexec, freshclam]
-            else:
-                # Fallback to running without elevation (may fail with permission error)
-                cmd = [freshclam]
+            # Fallback to running without elevation (may fail with permission error)
+            cmd = [freshclam]
 
         # Add verbose flag for more detailed output
         cmd.append("--verbose")

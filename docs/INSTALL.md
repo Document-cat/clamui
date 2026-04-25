@@ -59,13 +59,14 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 flatpak install flathub io.github.linx_systems.ClamUI
 ```
 
-> **Note:** The Flatpak version bundles ClamAV internally — no separate ClamAV installation is required. This bundled
-> ClamAV is only available within the Flatpak sandbox and is not installed system-wide.
+> **Note:** The Flatpak version does not bundle ClamAV. Install ClamAV on the host system first:
+> `sudo apt install clamav clamav-freshclam` on Ubuntu/Debian, `sudo dnf install clamav clamav-update` on Fedora,
+> or `sudo pacman -S clamav` on Arch Linux.
 
 ### Update Virus Definitions
 
-After installation, launch ClamUI and run a database update from the application to download the latest virus
-definitions.
+After installation, launch ClamUI and run a database update from the application, or run host `freshclam`, to download
+the latest virus definitions.
 
 ### Run ClamUI
 
@@ -92,8 +93,8 @@ sudo apt install flatpak-builder    # Ubuntu/Debian
 sudo dnf install flatpak-builder    # Fedora
 sudo pacman -S flatpak-builder      # Arch Linux
 
-# Install the GNOME 49 SDK, runtime, and Rust extension (needed for ClamAV compilation)
-flatpak install flathub org.gnome.Sdk//49 org.gnome.Platform//49 org.freedesktop.Sdk.Extension.rust-stable//24.08
+# Install the GNOME 49 SDK and runtime
+flatpak install flathub org.gnome.Sdk//49 org.gnome.Platform//49
 ```
 
 #### Build
@@ -106,7 +107,7 @@ cd clamui
 flatpak-builder --force-clean build-dir flathub/io.github.linx_systems.ClamUI.yml
 ```
 
-> **Note:** The first build downloads and compiles ClamAV with Rust, which may take several minutes.
+> **Note:** The Flatpak build uses host ClamAV at runtime and does not compile ClamAV into `/app`.
 
 #### Test Without Installing
 
@@ -150,7 +151,7 @@ ClamUI requests the following permissions:
 | `--share=network` | Virus database updates |
 | `--share=ipc`, `--device=dri` | Shared memory and GPU for rendering |
 | `--socket=wayland`, `--socket=fallback-x11` | Display support |
-| `--talk-name=org.freedesktop.Flatpak` | Host systemctl for scheduled scan timers |
+| `--talk-name=org.freedesktop.Flatpak` | Host ClamAV tools, systemctl, and config helpers via `flatpak-spawn --host` |
 | `--talk-name=org.freedesktop.Notifications` | Desktop notifications |
 | `--talk-name=org.freedesktop.secrets` | Secure API key storage (keyring) |
 | `--talk-name=org.kde.StatusNotifierWatcher` etc. | System tray (SNI protocol) |

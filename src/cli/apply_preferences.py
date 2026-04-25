@@ -15,7 +15,6 @@ from pathlib import Path
 
 from ..core.path_validation import validate_path
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -48,6 +47,7 @@ _ALLOWED_DEST_DIRS: tuple[Path, ...] = (
     Path("/etc/clamd.d"),
     Path("/etc/clamav-unofficial-sigs"),
 )
+_ALLOWED_DEST_FILES: tuple[Path, ...] = (Path("/etc/freshclam.conf"),)
 
 _FRESHCLAM_UNITS: tuple[str, ...] = (
     "clamav-freshclam.service",
@@ -81,6 +81,9 @@ def _validate_destination(destination: Path) -> None:
 
     if resolved.suffix != ".conf":
         raise ValueError(f"Destination must have a .conf extension: {resolved}")
+
+    if resolved in _ALLOWED_DEST_FILES:
+        return
 
     if resolved.parent not in _ALLOWED_DEST_DIRS:
         raise ValueError(f"Destination is not in allowed config directories: {resolved}")
@@ -161,7 +164,9 @@ def _restart_units_for_destinations(destinations: list[Path]) -> None:
             text=True,
         )
         if restart_result.returncode != 0:
-            error = restart_result.stderr.strip() or restart_result.stdout.strip() or "unknown error"
+            error = (
+                restart_result.stderr.strip() or restart_result.stdout.strip() or "unknown error"
+            )
             raise RuntimeError(f"Failed to restart {unit}: {error}")
 
 

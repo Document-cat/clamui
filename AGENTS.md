@@ -319,12 +319,16 @@ cmd = wrap_host_command(["clamscan", "--version"])
 # Native: ['clamscan', '--version']
 ```
 
+Flatpak packaging does **not** bundle ClamAV. Flatpak builds require host `clamscan` and `freshclam`; daemon mode
+also requires host `clamd`/`clamdscan`. Do not add `/app/bin` bundled-ClamAV fallbacks or sandbox database
+assumptions. Keep ClamAV subprocesses and host config access behind `flatpak-spawn --host`.
+
 Additional Flatpak utilities in `flatpak.py`:
 
-- `get_clamav_database_dir()` - Get ClamAV database directory for Flatpak
-- `ensure_clamav_database_dir()` - Create database directory if needed
-- `ensure_freshclam_config()` - Generate freshclam.conf with correct paths
+- `which_host_command()` - Resolve host binaries from inside Flatpak
+- `read_host_file()` - Read host config files from inside Flatpak
 - `format_flatpak_portal_path()` - Format paths from Flatpak portal
+- `get_clamav_database_dir()` / `ensure_freshclam_config()` - Legacy sandbox database/config helpers; do not use for new Flatpak ClamAV runtime paths
 
 ### GTK4 Widget Patterns
 
@@ -555,7 +559,8 @@ def test_something(mock_gi_modules):
 ### ClamAV Detection (`src/core/clamav_detection.py`)
 
 - `check_clamav_installed()` - Check installation and version
-- `find_clamav_binary()` - Locate ClamAV executables
+- `get_clamav_path()` / `get_freshclam_path()` - Locate host/native ClamAV executables
+- `check_database_available()` - Check host/native virus database availability
 - `check_clamd_connection()` - Test daemon connectivity
 
 ### Keyring Manager (`src/core/keyring_manager.py`)
@@ -778,8 +783,11 @@ The `src/core/flatpak.py` module handles Flatpak-specific functionality:
 
 - `is_flatpak()` - Detect if running in Flatpak sandbox
 - `wrap_host_command()` - Wrap commands for host execution
-- `get_clamav_database_dir()` - Get writable database directory
-- `ensure_freshclam_config()` - Generate freshclam.conf for Flatpak
+- `which_host_command()` - Find host executables from inside Flatpak
+- `read_host_file()` - Read host ClamAV config files from inside Flatpak
+
+Flatpak ClamUI requires ClamAV on the host. The manifests must not compile or install ClamAV, `json-c`, or Rust SDK
+extensions solely for ClamAV.
 
 ### Regenerating Flatpak Dependencies
 
@@ -860,8 +868,8 @@ See `appimage/build-appimage.sh` for detailed build configuration.
 
 ## Packaging Notes
 
-- Flatpak uses `--filesystem=host` (read-write) for full scanning + quarantine operations.
+- Flatpak uses `--filesystem=host` (read-write) for full scanning + quarantine operations and runs host ClamAV tools through `flatpak-spawn --host`.
 - Debian packages require Python 3.11+.
-- AppImage bundles Python + GTK4/libadwaita (~96 MB); still requires host ClamAV.
+- Flatpak and AppImage both require host ClamAV; neither should be treated as owning the virus database.
 - `urllib3>=2.6.3` is pinned for CVE fix (decompression-bomb bypass on redirects).
 - See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) and [`SECURITY.md`](SECURITY.md) for historical security-hardening changes and current advisories.

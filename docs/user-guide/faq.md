@@ -1543,10 +1543,7 @@ Status messages:
 # Native installation:
 sudo freshclam
 
-# Flatpak installation (bundled ClamAV):
-flatpak run --command=freshclam io.github.linx_systems.ClamUI
-
-# Flatpak with daemon backend (host clamd):
+# Flatpak installation (host ClamAV):
 flatpak-spawn --host sudo freshclam
 ```
 
@@ -2321,4 +2318,3 @@ Workflow:
 - [Scan Profiles](profiles.md) - Profile management
 
 ---
-

@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from gi.repository import GLib
 
-from .flatpak import get_clamav_database_dir
 from .log_manager import LogManager
 from .scanner_base import (
     cleanup_process,
@@ -744,12 +743,6 @@ class Scanner:
         """
         clamscan = get_clamav_path() or "clamscan"
         cmd = [clamscan]
-
-        # --database: Override default DB location (needed for Flatpak user-writable DB)
-        # In Flatpak, specify the database directory (user-writable location)
-        db_dir = get_clamav_database_dir()
-        if db_dir is not None:
-            cmd.extend(["--database", str(db_dir)])
 
         # -r / --recursive: Scan subdirectories recursively
         # Add recursive flag for directories

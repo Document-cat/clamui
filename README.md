@@ -309,7 +309,7 @@ ClamUI requires the following components to be installed on your system:
 </tr>
 <tr>
 <td><strong>ClamAV</strong></td>
-<td>The <code>clamscan</code> command-line tool (bundled in Flatpak; install separately for native packages)</td>
+<td>The host <code>clamscan</code> command-line tool. The Flatpak package also requires ClamAV on the host.</td>
 </tr>
 <tr>
 <td><strong>GTK4 + libadwaita</strong></td>

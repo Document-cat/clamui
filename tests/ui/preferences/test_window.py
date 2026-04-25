@@ -626,15 +626,13 @@ class TestFlatpakSupport:
                 "src.ui.preferences.window.resolve_freshclam_conf_path",
                 return_value="/etc/clamav/freshclam.conf",
             ):
-                with mock.patch("src.ui.preferences.window.ensure_freshclam_config") as mock_ensure:
-                    with mock.patch.object(PreferencesWindow, "_setup_ui"):
-                        with mock.patch.object(PreferencesWindow, "_load_configs"):
-                            with mock.patch.object(PreferencesWindow, "_populate_scheduled_fields"):
-                                window = PreferencesWindow()
-                                assert window._freshclam_conf_path == "/etc/clamav/freshclam.conf"
-                                mock_ensure.assert_not_called()
+                with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                    with mock.patch.object(PreferencesWindow, "_load_configs"):
+                        with mock.patch.object(PreferencesWindow, "_populate_scheduled_fields"):
+                            window = PreferencesWindow()
+                            assert window._freshclam_conf_path == "/etc/clamav/freshclam.conf"
 
-    def test_flatpak_falls_back_to_generated_freshclam_path(
+    def test_flatpak_falls_back_to_host_freshclam_default(
         self,
         mock_gi_modules,
         mock_parse_config,
@@ -642,30 +640,18 @@ class TestFlatpakSupport:
         mock_scheduler,
         mock_page_modules,
     ):
-        """Test Flatpak uses generated config only when no host config is found."""
+        """Test Flatpak uses host default when no freshclam config is found."""
         from src.ui.preferences.window import PreferencesWindow
-
-        mock_flatpak_path = "/home/user/.var/app/io.github.linx_systems.ClamUI/freshclam.conf"
 
         with mock.patch("src.ui.preferences.window.is_flatpak", return_value=True):
             with mock.patch(
                 "src.ui.preferences.window.resolve_freshclam_conf_path", return_value=None
             ):
-                with mock.patch(
-                    "src.ui.preferences.window.get_freshclam_config_path",
-                    return_value=mock_flatpak_path,
-                ):
-                    with mock.patch(
-                        "src.ui.preferences.window.ensure_freshclam_config",
-                        return_value=mock_flatpak_path,
-                    ):
-                        with mock.patch.object(PreferencesWindow, "_setup_ui"):
-                            with mock.patch.object(PreferencesWindow, "_load_configs"):
-                                with mock.patch.object(
-                                    PreferencesWindow, "_populate_scheduled_fields"
-                                ):
-                                    window = PreferencesWindow()
-                                    assert window._freshclam_conf_path == mock_flatpak_path
+                with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                    with mock.patch.object(PreferencesWindow, "_load_configs"):
+                        with mock.patch.object(PreferencesWindow, "_populate_scheduled_fields"):
+                            window = PreferencesWindow()
+                            assert window._freshclam_conf_path == "/etc/clamav/freshclam.conf"
 
 
 class TestClamdAvailability:
@@ -780,23 +766,19 @@ class TestClamdAvailability:
                     "src.ui.preferences.window.config_file_exists", return_value=True
                 ) as mock_exists:
                     with mock.patch(
-                        "src.ui.preferences.window.get_freshclam_config_path",
-                        return_value=None,
+                        "src.ui.preferences.window.resolve_freshclam_conf_path",
+                        return_value="/etc/freshclam.conf",
                     ):
-                        with mock.patch(
-                            "src.ui.preferences.window.resolve_freshclam_conf_path",
-                            return_value="/etc/freshclam.conf",
-                        ):
-                            with mock.patch.object(PreferencesWindow, "_setup_ui"):
-                                with mock.patch.object(PreferencesWindow, "_load_configs"):
-                                    with mock.patch.object(
-                                        PreferencesWindow, "_populate_scheduled_fields"
-                                    ):
-                                        window = PreferencesWindow()
-                                        assert window._clamd_available is True
-                                        assert window._clamd_conf_path == "/etc/clamd.d/scan.conf"
-                                        # Verify host-aware check was used
-                                        mock_exists.assert_called_with("/etc/clamd.d/scan.conf")
+                        with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                            with mock.patch.object(PreferencesWindow, "_load_configs"):
+                                with mock.patch.object(
+                                    PreferencesWindow, "_populate_scheduled_fields"
+                                ):
+                                    window = PreferencesWindow()
+                                    assert window._clamd_available is True
+                                    assert window._clamd_conf_path == "/etc/clamd.d/scan.conf"
+                                    # Verify host-aware check was used
+                                    mock_exists.assert_called_with("/etc/clamd.d/scan.conf")
 
     def test_flatpak_clamd_unavailable_when_host_config_missing(
         self,
@@ -812,20 +794,16 @@ class TestClamdAvailability:
             with mock.patch("src.ui.preferences.window.resolve_clamd_conf_path", return_value=None):
                 with mock.patch("src.ui.preferences.window.config_file_exists", return_value=False):
                     with mock.patch(
-                        "src.ui.preferences.window.get_freshclam_config_path",
-                        return_value=None,
+                        "src.ui.preferences.window.resolve_freshclam_conf_path",
+                        return_value="/etc/freshclam.conf",
                     ):
-                        with mock.patch(
-                            "src.ui.preferences.window.resolve_freshclam_conf_path",
-                            return_value="/etc/freshclam.conf",
-                        ):
-                            with mock.patch.object(PreferencesWindow, "_setup_ui"):
-                                with mock.patch.object(PreferencesWindow, "_load_configs"):
-                                    with mock.patch.object(
-                                        PreferencesWindow, "_populate_scheduled_fields"
-                                    ):
-                                        window = PreferencesWindow()
-                                        assert window._clamd_available is False
+                        with mock.patch.object(PreferencesWindow, "_setup_ui"):
+                            with mock.patch.object(PreferencesWindow, "_load_configs"):
+                                with mock.patch.object(
+                                    PreferencesWindow, "_populate_scheduled_fields"
+                                ):
+                                    window = PreferencesWindow()
+                                    assert window._clamd_available is False
 
     def test_availability_uses_config_file_exists_not_path_exists(
         self,

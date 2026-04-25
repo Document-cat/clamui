@@ -3,8 +3,8 @@
 Database update interface component for ClamUI with update button, progress display, and results.
 """
 
-import threading
 import logging
+import threading
 
 import gi
 

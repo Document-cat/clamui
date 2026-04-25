@@ -58,7 +58,7 @@ Every operation exposes `operation_sync()` (blocks) and `operation_async()` (spa
 - **Blocking main thread**: Never call `scan_sync()` from UI — use `scan_async()`
 - **`process.wait()`**: Use `communicate_with_cancel_check()` — supports cancellation
 - **Forgetting cancel reset**: Always `self._cancel_event.clear()` at start of sync methods
-- **Hardcoded paths**: Use `get_clamav_database_dir()`, never `/var/lib/clamav` directly
+- **Flatpak ClamAV ownership**: Flatpak uses host ClamAV via `flatpak-spawn --host`; do not add bundled `/app/bin` ClamAV or sandbox database assumptions
 - **Unsanitized logging**: All user/external input through `sanitize_log_line()` or `sanitize_log_text()`
 - **Missing Flatpak wrap**: All subprocess calls need `wrap_host_command()` in Flatpak
 

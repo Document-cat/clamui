@@ -82,7 +82,9 @@ class TestApplyPreferencesCli:
 
         with (
             patch.dict(main.__globals__, {"_validate_destination": lambda _destination: None}),
-            patch.dict(main.__globals__, {"_apply_config_file": lambda _source, _destination: None}),
+            patch.dict(
+                main.__globals__, {"_apply_config_file": lambda _source, _destination: None}
+            ),
             patch("src.cli.apply_preferences.shutil.which", return_value="/usr/bin/systemctl"),
             patch("src.cli.apply_preferences.subprocess.run", side_effect=_fake_run),
         ):
@@ -161,6 +163,10 @@ class TestValidateDestination:
     def test_accepts_redhat_clamd_config_path(self):
         """Paths under /etc/clamd.d/ with .conf extension should be allowed."""
         _validate_destination(Path("/etc/clamd.d/scan.conf"))
+
+    def test_accepts_redhat_freshclam_config_path(self):
+        """The Fedora/RHEL freshclam config file should be allowed exactly."""
+        _validate_destination(Path("/etc/freshclam.conf"))
 
     def test_accepts_unofficial_sigs_config_path(self):
         """Paths under /etc/clamav-unofficial-sigs/ should be allowed."""

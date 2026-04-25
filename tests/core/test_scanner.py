@@ -378,6 +378,23 @@ class TestScannerFlatpakIntegration:
         call_args = mock_wrap.call_args[0][0]
         assert call_args[0] == "/usr/bin/clamscan"
 
+    def test_scanner_flatpak_does_not_pass_sandbox_database(self, tmp_path):
+        """Host clamscan should use the host's default database paths."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        scanner = Scanner()
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch(
+                "src.core.scanner.wrap_host_command",
+                side_effect=lambda x: ["flatpak-spawn", "--host", *x],
+            ):
+                cmd = scanner._build_command(str(test_file), recursive=False)
+
+        assert cmd[:3] == ["flatpak-spawn", "--host", "/usr/bin/clamscan"]
+        assert "--database" not in cmd
+
 
 class TestScanResult:
     """Tests for the ScanResult dataclass."""

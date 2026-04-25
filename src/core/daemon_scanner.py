@@ -4,8 +4,8 @@ Daemon scanner module for ClamUI using clamdscan for clamd communication.
 Provides faster scanning by leveraging the ClamAV daemon's in-memory database.
 """
 
-import fnmatch
 import contextlib
+import fnmatch
 import logging
 import os
 import subprocess
@@ -424,8 +424,8 @@ class DaemonScanner:
         Returns:
             List of command arguments (wrapped with flatpak-spawn if in Flatpak)
         """
-        # Use binary name only - don't use which_host_command() because it would
-        # return the bundled /app/bin/clamdscan which can't talk to the host daemon
+        # Use binary name only so Flatpak wraps it for host execution through
+        # flatpak-spawn instead of resolving a sandbox path.
         #
         # In verbose mode, prepend stdbuf -oL to force line-buffered stdout.
         # Without this, clamdscan's C runtime uses full buffering (~4KB blocks)

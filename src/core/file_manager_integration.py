@@ -19,8 +19,8 @@ from enum import Enum
 from pathlib import Path
 
 from .flatpak import is_flatpak, wrap_host_command
-from .path_validation import validate_path
 from .i18n import N_, _
+from .path_validation import validate_path
 
 logger = logging.getLogger(__name__)
 

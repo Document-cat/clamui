@@ -77,22 +77,32 @@ ClamAV 1.0.0/...
 
 #### Solution 3: Flatpak-Specific Issues
 
-If you installed ClamUI via Flatpak, ClamAV is **bundled internally** — no host installation is required.
+If you installed ClamUI via Flatpak, install ClamAV on the host system. The Flatpak runs host `clamscan`,
+`freshclam`, and `clamdscan` through `flatpak-spawn --host`.
 
 **If you still see "ClamAV Not Found" errors:**
 
-1. **Reinstall the Flatpak** (may fix corrupted installation):
+1. **Install host ClamAV**:
+   ```bash
+   sudo apt install clamav clamav-freshclam      # Ubuntu/Debian
+   sudo dnf install clamav clamav-update        # Fedora
+   sudo pacman -S clamav                        # Arch Linux
+   ```
+
+2. **Check for database update errors**:
+   - Open ClamUI and go to the "Update" view
+   - Click "Update Database" and watch for errors
+   - Or run `sudo freshclam` on the host
+   - Check logs in `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/logs/`
+
+3. **Reinstall the Flatpak** (may fix corrupted installation):
    ```bash
    flatpak uninstall io.github.linx_systems.ClamUI
    flatpak install flathub io.github.linx_systems.ClamUI
    ```
 
-2. **Check for database update errors** (database may not have downloaded):
-   - Open ClamUI and go to the "Update" view
-   - Click "Update Database" and watch for errors
-   - Check logs in `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/logs/`
-
-**Note:** The daemon scan backend requires clamd on the host system. If you want to use daemon scanning, install clamav-daemon on your host and set `"scan_backend": "daemon"` in settings. Otherwise, use the default `"clamscan"` backend which uses the bundled ClamAV.
+**Note:** The daemon scan backend requires host `clamd`/`clamdscan`. If you want to use daemon scanning, install
+`clamav-daemon` on your host and set `"scan_backend": "daemon"` in settings.
 
 **Check Flatpak permissions:**
 

@@ -6,7 +6,7 @@ This module provides functions for:
 - Detecting if ClamUI is running inside a Flatpak sandbox
 - Wrapping host commands to bridge the sandbox boundary
 - Resolving Flatpak document portal paths to user-friendly display paths
-- Finding binaries on the host system when running in Flatpak
+- Finding host binaries when running in Flatpak
 """
 
 import logging
@@ -19,7 +19,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Default database directory for Flatpak (inside sandbox data directory)
+# Legacy sandbox database directory used by older Flatpak builds.
 _FLATPAK_DATABASE_DIR: Path | None = None
 
 # Flatpak detection cache (None = not checked, True/False = result)
@@ -73,13 +73,13 @@ def get_clean_env() -> dict[str, str]:
 
 def get_clamav_database_dir() -> Path | None:
     """
-    Get the ClamAV database directory for Flatpak installations.
+    Get the legacy sandbox ClamAV database directory for Flatpak installations.
 
-    In Flatpak, the /app directory is read-only, so we use the app's
-    data directory ($XDG_DATA_HOME/clamav) for virus databases.
+    Current Flatpak runtime paths use host ClamAV and host virus databases.
+    This helper remains for compatibility with older sandbox-database helpers.
 
     Returns:
-        Path to database directory in Flatpak, None for native installations
+        Legacy sandbox database path in Flatpak, None for native installations
     """
     global _FLATPAK_DATABASE_DIR
 
@@ -102,12 +102,12 @@ def get_clamav_database_dir() -> Path | None:
 
 def ensure_clamav_database_dir() -> Path | None:
     """
-    Ensure the ClamAV database directory exists for Flatpak installations.
+    Ensure the legacy sandbox ClamAV database directory exists.
 
-    Creates the directory if it doesn't exist. Only applicable in Flatpak.
+    Current Flatpak builds do not use this path for scanning or updates.
 
     Returns:
-        Path to the created/existing database directory, None for native installations
+        Path to the created/existing legacy directory, None for native installations
     """
     db_dir = get_clamav_database_dir()
     if db_dir is None:
@@ -124,13 +124,10 @@ def ensure_clamav_database_dir() -> Path | None:
 
 def get_freshclam_config_path() -> Path | None:
     """
-    Get the path to freshclam.conf for Flatpak installations.
+    Get the legacy sandbox freshclam.conf path for Flatpak installations.
 
-    In Flatpak, we generate a config file at runtime in the user's config
-    directory because:
-    1. /app is read-only, so we can't modify the bundled config
-    2. We need to set DatabaseDirectory to a user-writable location
-    3. Config files can't use environment variables
+    Current Flatpak builds use host freshclam and host configuration. This
+    path is kept for compatibility with older sandbox database helpers.
 
     Returns:
         Path to the config file in Flatpak, None for native installations
@@ -147,10 +144,10 @@ def get_freshclam_config_path() -> Path | None:
 
 def ensure_freshclam_config() -> Path | None:
     """
-    Ensure freshclam.conf exists with correct DatabaseDirectory for Flatpak.
+    Ensure the legacy sandbox freshclam.conf exists for Flatpak.
 
-    Generates the config file at runtime with the correct database directory
-    path since static config files can't use environment variables.
+    Current Flatpak runtime paths should prefer host freshclam configuration.
+    This helper is retained for compatibility with older sandbox database data.
 
     Returns:
         Path to the config file, None for native installations or on error
@@ -235,26 +232,22 @@ def wrap_host_command(command: list[str], force_host: bool = False) -> list[str]
     """
     Wrap a command with flatpak-spawn --host if needed in Flatpak.
 
-    When running inside a Flatpak sandbox:
-    - Commands using bundled binaries (/app/bin/*) run directly (unless force_host=True)
-    - Commands using host binaries are prefixed with 'flatpak-spawn --host'
+    This helper is for commands that must run on the host. ClamAV is not
+    bundled in the Flatpak, so clamscan, clamdscan, freshclam, systemctl, and
+    similar tools always cross the sandbox boundary.
 
     Args:
         command: The command to wrap as a list of strings
                  (e.g., ['clamscan', '--version'])
-        force_host: If True, always use flatpak-spawn --host even if a bundled
-                    binary exists. Use this for commands that must interact with
-                    host services (e.g., clamdscan communicating with host clamd).
+        force_host: Kept for backwards-compatible call sites. Host execution is
+                    already the only Flatpak behavior.
 
     Returns:
-        The command, potentially wrapped for host execution if in Flatpak
+        The command, wrapped for host execution if running in Flatpak
 
     Example:
         >>> wrap_host_command(['clamscan', '--version'])
         ['clamscan', '--version']  # When not in Flatpak
-
-        >>> wrap_host_command(['/app/bin/clamscan', '--version'])
-        ['/app/bin/clamscan', '--version']  # Bundled binary in Flatpak
 
         >>> wrap_host_command(['clamscan', '--version'])
         ['flatpak-spawn', '--host', 'clamscan', '--version']  # Host binary in Flatpak
@@ -266,23 +259,8 @@ def wrap_host_command(command: list[str], force_host: bool = False) -> list[str]
         return command
 
     if is_flatpak():
-        binary = command[0]
-
-        # If force_host is set, always use the host binary (skip bundled check)
-        # This is needed for commands like clamdscan that must communicate with
-        # the host's clamd daemon, not a bundled daemon
-        if force_host:
-            return ["flatpak-spawn", "--host"] + list(command)
-
-        # Check if it's a bundled Flatpak binary (absolute path in /app/)
-        if binary.startswith("/app/"):
+        if command[:2] == ["flatpak-spawn", "--host"]:
             return list(command)
-        # Check if it's a binary name that exists in /app/bin/
-        flatpak_bin = f"/app/bin/{binary}"
-        if os.path.isfile(flatpak_bin) and os.access(flatpak_bin, os.X_OK):
-            # Use the bundled binary directly
-            return [flatpak_bin] + list(command[1:])
-        # Fall back to host command
         return ["flatpak-spawn", "--host"] + list(command)
 
     return list(command)
@@ -338,13 +316,11 @@ def get_xdg_user_dir(dir_type: str) -> str | None:
 
 def which_host_command(binary: str) -> str | None:
     """
-    Find binary path, checking bundled Flatpak binaries first, then host system.
+    Find a binary path on the host system.
 
-    When running inside a Flatpak sandbox:
-    1. First checks if the binary exists in /app/bin/ (bundled with Flatpak)
-    2. Falls back to host system via 'flatpak-spawn --host which'
-
-    This ensures bundled ClamAV binaries are used when available.
+    When running inside a Flatpak sandbox, this uses
+    ``flatpak-spawn --host which``. ClamAV tools are intentionally required on
+    the host and are not resolved from /app/bin.
 
     Args:
         binary: The name of the binary to find (e.g., 'clamscan')
@@ -353,13 +329,6 @@ def which_host_command(binary: str) -> str | None:
         The full path to the binary if found, None otherwise
     """
     if is_flatpak():
-        # First check for bundled binary in Flatpak
-        flatpak_bin = f"/app/bin/{binary}"
-        if os.path.isfile(flatpak_bin) and os.access(flatpak_bin, os.X_OK):
-            logger.debug("Found bundled binary: %s", flatpak_bin)
-            return flatpak_bin
-
-        # Fall back to host system
         try:
             result = subprocess.run(
                 ["flatpak-spawn", "--host", "which", binary],

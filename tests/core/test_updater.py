@@ -51,14 +51,14 @@ class TestGetPkexecPath:
     def test_returns_path_when_pkexec_available(self, updater_module):
         """Test returns path when pkexec is found."""
         get_pkexec_path = updater_module["get_pkexec_path"]
-        with patch("shutil.which", return_value="/usr/bin/pkexec"):
+        with patch("src.core.updater.which_host_command", return_value="/usr/bin/pkexec"):
             result = get_pkexec_path()
             assert result == "/usr/bin/pkexec"
 
     def test_returns_none_when_pkexec_not_found(self, updater_module):
         """Test returns None when pkexec is not found."""
         get_pkexec_path = updater_module["get_pkexec_path"]
-        with patch("shutil.which", return_value=None):
+        with patch("src.core.updater.which_host_command", return_value=None):
             result = get_pkexec_path()
             assert result is None
 
@@ -302,31 +302,25 @@ class TestFreshclamUpdaterBuildCommand:
                         mock_wrap.assert_called_once()
                         assert cmd[0] == "flatpak-spawn"
 
-    def test_build_command_flatpak_uses_config_file(self, updater_module, tmp_path):
-        """Test Flatpak mode uses generated config file without pkexec."""
+    def test_build_command_flatpak_uses_host_freshclam(self, updater_module):
+        """Test Flatpak mode uses host freshclam without generated sandbox config."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
-        config_path = tmp_path / "freshclam.conf"
-        # Create the config file since the code checks if it exists
-        config_path.write_text("# test config")
         with patch("src.core.updater.is_flatpak", return_value=True):
-            with patch("src.core.updater.get_freshclam_path", return_value="/app/bin/freshclam"):
-                with patch("src.core.updater.ensure_clamav_database_dir"):
+            with patch("src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"):
+                with patch("src.core.updater.get_pkexec_path", return_value=None):
                     with patch(
-                        "src.core.updater.ensure_freshclam_config",
-                        return_value=config_path,
+                        "src.core.updater.wrap_host_command",
+                        side_effect=lambda x: ["flatpak-spawn", "--host", *x],
                     ):
-                        with patch(
-                            "src.core.updater.wrap_host_command",
-                            side_effect=lambda x: x,
-                        ):
-                            updater = FreshclamUpdater(log_manager=MagicMock())
-                            cmd = updater._build_command()
-                            # Should use freshclam directly (no pkexec in Flatpak)
-                            assert cmd[0] == "/app/bin/freshclam"
-                            # Should include config file
-                            assert "--config-file" in cmd
-                            assert str(config_path) in cmd
-                            assert "--verbose" in cmd
+                        updater = FreshclamUpdater(log_manager=MagicMock())
+                        cmd = updater._build_command()
+                        assert cmd == [
+                            "flatpak-spawn",
+                            "--host",
+                            "/usr/bin/freshclam",
+                            "--verbose",
+                        ]
+                        assert "--config-file" not in cmd
 
     def test_build_command_with_force_flag(self, updater_module):
         """Test command with force flag does not include --no-dns (removed in new implementation)."""
@@ -1104,8 +1098,8 @@ class TestFreshclamUpdaterCommunicateTimeout:
         assert result.status == UpdateStatus.ERROR
         mock_restore.assert_called_once()
 
-    def test_force_cancel_restores_backup_in_flatpak_mode(self, updater_module):
-        """Force-update cancellation should restore backups in Flatpak mode."""
+    def test_force_cancel_does_not_touch_sandbox_backup_in_flatpak_mode(self, updater_module):
+        """Flatpak force updates operate on the host and skip sandbox DB backup."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
@@ -1118,38 +1112,38 @@ class TestFreshclamUpdaterCommunicateTimeout:
                     updater._update_cancelled = True
                     return ("", "", 0, False)
 
-                with patch.object(
-                    updater,
-                    "_backup_local_databases",
-                    return_value=(True, None, []),
-                ):
+                with patch.object(updater, "_backup_local_databases") as mock_backup:
                     with patch.object(
                         updater,
                         "_delete_local_databases",
-                        return_value=(True, None, 2),
-                    ):
+                    ) as mock_delete:
                         with patch.object(
-                            updater,
-                            "_build_command",
-                            return_value=["freshclam"],
+                            updater, "_check_freshclam_running", return_value=(False, None)
                         ):
                             with patch.object(
                                 updater,
-                                "_run_update_process",
-                                side_effect=simulate_cancel,
+                                "_build_command",
+                                return_value=["freshclam"],
                             ):
                                 with patch.object(
                                     updater,
-                                    "_restore_databases_from_backup",
-                                    return_value=(True, "Restored"),
-                                ) as mock_restore:
-                                    result = updater.update_sync(
-                                        force=True,
-                                        prefer_service=False,
-                                    )
+                                    "_run_update_process",
+                                    side_effect=simulate_cancel,
+                                ):
+                                    with patch.object(
+                                        updater,
+                                        "_restore_databases_from_backup",
+                                        return_value=(True, "Restored"),
+                                    ) as mock_restore:
+                                        result = updater.update_sync(
+                                            force=True,
+                                            prefer_service=False,
+                                        )
 
         assert result.status == UpdateStatus.CANCELLED
-        mock_restore.assert_called_once()
+        mock_backup.assert_not_called()
+        mock_delete.assert_not_called()
+        mock_restore.assert_not_called()
 
 
 # =============================================================================
@@ -1881,18 +1875,31 @@ class TestUpdateResultMethod:
 class TestCheckFreshclamService:
     """Tests for FreshclamUpdater.check_freshclam_service() method."""
 
-    def test_returns_not_found_in_flatpak(self, updater_module):
-        """Test returns NOT_FOUND when running in Flatpak."""
+    def test_checks_host_service_in_flatpak(self, updater_module):
+        """Test Flatpak service checks are wrapped for host execution."""
         from src.core.updater import FreshclamServiceStatus, FreshclamUpdater
 
         mock_log_manager = MagicMock()
+        calls = []
 
-        with patch("src.core.updater.is_flatpak", return_value=True):
+        def mock_run(cmd, *args, **kwargs):
+            calls.append(cmd)
+            return MagicMock(returncode=3, stdout="inactive")
+
+        with (
+            patch(
+                "src.core.updater.wrap_host_command",
+                side_effect=lambda cmd: ["flatpak-spawn", "--host", *cmd],
+            ),
+            patch("subprocess.run", side_effect=mock_run),
+        ):
             updater = FreshclamUpdater(log_manager=mock_log_manager)
             status, pid = updater.check_freshclam_service()
 
-        assert status == FreshclamServiceStatus.NOT_FOUND
+        assert status == FreshclamServiceStatus.STOPPED
         assert pid is None
+        assert calls[0][:2] == ["flatpak-spawn", "--host"]
+        assert calls[0][2:4] == ["systemctl", "is-active"]
 
     def test_returns_running_when_service_active(self, updater_module):
         """Test returns RUNNING when systemd service is active."""

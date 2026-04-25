@@ -70,7 +70,7 @@ sudo systemctl start clamav-daemon
 
 ### Flatpak Users
 
-The ClamUI Flatpak bundles ClamAV (clamscan, freshclam) internally. To use the daemon backend, clamd must be installed on the **host system** since it runs as a system service outside the sandbox. ClamUI auto-detects the host daemon.
+The ClamUI Flatpak does not bundle ClamAV. Install `clamscan` and `freshclam` on the **host system**; ClamUI runs them through `flatpak-spawn --host`. To use the daemon backend, install and start host `clamd`/`clamdscan`. ClamUI auto-detects the host daemon.
 
 ## Exit Codes
 

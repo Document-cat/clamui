@@ -480,9 +480,7 @@ class AuditView(Gtk.Box):
             warnings = summary.get(AuditStatus.WARNING, 0)
             issues = summary.get(AuditStatus.FAIL, 0)
             if warnings or issues:
-                self._notification_manager.notify_audit_complete(
-                    warnings=warnings, issues=issues
-                )
+                self._notification_manager.notify_audit_complete(warnings=warnings, issues=issues)
 
         return False  # Don't repeat
 
@@ -705,9 +703,7 @@ class AuditView(Gtk.Box):
         elif warnings:
             title = _("{count} checks need review").format(count=warnings)
             if passed:
-                title = _("{review} · {passed} passed").format(
-                    review=title, passed=passed
-                )
+                title = _("{review} · {passed} passed").format(review=title, passed=passed)
         else:
             title = _("Audit complete")
 
@@ -787,11 +783,7 @@ class AuditView(Gtk.Box):
         from ..core.flatpak import is_flatpak
 
         try:
-            cmd = (
-                ["flatpak-spawn", "--host", command]
-                if is_flatpak()
-                else [command]
-            )
+            cmd = ["flatpak-spawn", "--host", command] if is_flatpak() else [command]
             subprocess.Popen(
                 cmd,
                 start_new_session=True,

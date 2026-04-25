@@ -1319,7 +1319,7 @@ class TestWriteConfigsFlatpak:
         config.set_value("LogVerbose", "yes")
 
         monkeypatch.setattr(clamav_config_module, "_path_needs_elevation", lambda _: True)
-        monkeypatch.setattr("src.core.flatpak.is_flatpak", lambda: True)
+        monkeypatch.setattr(clamav_config_module, "_running_in_flatpak", lambda: True)
 
         run_calls = []
 
@@ -1351,7 +1351,7 @@ class TestWriteConfigsFlatpak:
         config.set_value("LogVerbose", "yes")
 
         monkeypatch.setattr(clamav_config_module, "_path_needs_elevation", lambda _: True)
-        monkeypatch.setattr("src.core.flatpak.is_flatpak", lambda: True)
+        monkeypatch.setattr(clamav_config_module, "_running_in_flatpak", lambda: True)
         monkeypatch.setattr(
             clamav_config_module,
             "_get_privileged_writer_path",
@@ -1387,7 +1387,7 @@ class TestWriteConfigsFlatpak:
         config.set_value("LogVerbose", "yes")
 
         monkeypatch.setattr(clamav_config_module, "_path_needs_elevation", lambda _: True)
-        monkeypatch.setattr("src.core.flatpak.is_flatpak", lambda: False)
+        monkeypatch.setattr(clamav_config_module, "_running_in_flatpak", lambda: False)
         monkeypatch.setattr(
             clamav_config_module,
             "_get_privileged_writer_path",
@@ -1420,7 +1420,7 @@ class TestWriteConfigsFlatpak:
         config.set_value("LogVerbose", "yes")
 
         monkeypatch.setattr(clamav_config_module, "_path_needs_elevation", lambda _: True)
-        monkeypatch.setattr("src.core.flatpak.is_flatpak", lambda: True)
+        monkeypatch.setattr(clamav_config_module, "_running_in_flatpak", lambda: True)
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
 
         temp_paths_seen = []
