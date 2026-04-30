@@ -807,8 +807,11 @@ class SecureFileHandler:
                 # Atomic move operation
                 shutil.move(quarantine_path, original_path)
 
-                # Restore original file permissions
-                os.chmod(original_path, original_permissions)
+                # Restore original file permissions.
+                # VULN-004: defense-in-depth — mask to the low 9 bits so a
+                # tampered DB row cannot inject setuid/setgid/sticky bits
+                # onto the restored file.
+                os.chmod(original_path, original_permissions & 0o777)
 
                 return FileOperationResult(
                     status=FileOperationStatus.SUCCESS,

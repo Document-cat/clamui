@@ -765,6 +765,9 @@ class TestTrayManagerReadStdout:
 
         manager = TrayManager()
         manager._running = True
+        # Mark as shutting down so EOF at end of mock stream doesn't trigger
+        # the crash-recovery / respawn path (UI-001 fix).
+        manager._shutting_down = True
 
         # Simulate stdout with JSON messages
         messages = ['{"event": "ready"}\n', '{"event": "pong"}\n']
@@ -788,6 +791,7 @@ class TestTrayManagerReadStdout:
 
         manager = TrayManager()
         manager._running = True
+        manager._shutting_down = True  # Suppress UI-001 respawn path on EOF
 
         # Simulate stdout with empty lines
         messages = ["\n", "   \n", '{"event": "ready"}\n', "\n"]
@@ -810,6 +814,7 @@ class TestTrayManagerReadStdout:
 
         manager = TrayManager()
         manager._running = True
+        manager._shutting_down = True  # Suppress UI-001 respawn path on EOF
 
         # Simulate stdout with invalid JSON
         messages = ["not valid json\n", "{invalid}\n", '{"event": "ready"}\n']
@@ -836,6 +841,7 @@ class TestTrayManagerReadStdout:
 
         manager = TrayManager()
         manager._running = True
+        manager._shutting_down = True  # Suppress UI-001 respawn path on EOF
 
         # Create oversized message (> 1MB)
         oversized_data = "x" * (TrayManager.MAX_MESSAGE_SIZE + 1)
@@ -1432,6 +1438,154 @@ class TestTrayManagerEdgeCases:
         assert manager._process is None
 
 
+class TestTrayManagerSubprocessCrashRecovery:
+    """Regression tests for UI-001 — silent tray subprocess crash detection.
+
+    Prior behavior: when the tray subprocess died (segfault, OOM, D-Bus loss)
+    the stdout reader exited silently on EOF; ``_ready`` stayed True; ``is_active``
+    kept reporting True; ``_send_command`` wrote to a closed pipe and just logged.
+
+    Expected behavior after the fix:
+    - on EOF, ``_ready`` is reset to False
+    - subprocess exit is observed via ``poll()``
+    - ``start()`` is called again to respawn (bounded)
+    - after 3 rapid respawns, respawn stops and ``_tray_down`` flag is set
+    - no respawn is attempted while ``stop()`` is in progress (``_shutting_down``)
+    """
+
+    def test_subprocess_eof_resets_ready_flag(self, mock_gtk_modules):
+        """When stdout EOFs (subprocess died), ``_ready`` must be reset to False."""
+        from io import StringIO
+
+        from src.ui.tray_manager import TrayManager
+
+        manager = TrayManager()
+        manager._running = True
+        manager._ready = True  # Simulate subprocess that was previously ready
+
+        # Empty stdout simulates immediate EOF (subprocess died)
+        mock_stdout = StringIO("")
+
+        mock_process = mock.Mock()
+        mock_process.stdout = mock_stdout
+        mock_process.poll = mock.Mock(return_value=139)  # SIGSEGV
+        manager._process = mock_process
+
+        # Don't actually respawn during this test — patch start() to noop
+        with mock.patch.object(manager, "start", return_value=True):
+            manager._read_stdout()
+
+        # After EOF the reader must have cleared _ready.
+        assert manager._ready is False
+
+    def test_subprocess_crash_triggers_respawn(self, mock_gtk_modules):
+        """When subprocess exits with non-zero, ``start()`` should be called again."""
+        from io import StringIO
+
+        from src.ui.tray_manager import TrayManager
+
+        manager = TrayManager()
+        manager._running = True
+
+        mock_stdout = StringIO("")  # EOF immediately
+        mock_process = mock.Mock()
+        mock_process.stdout = mock_stdout
+        mock_process.poll = mock.Mock(return_value=1)  # Non-zero exit
+        manager._process = mock_process
+
+        with mock.patch.object(manager, "start", return_value=True) as mock_start:
+            manager._read_stdout()
+
+        # Respawn was attempted.
+        mock_start.assert_called()
+
+    def test_respawn_circuit_breaks_after_3_failures(self, mock_gtk_modules):
+        """Respawn must stop after 3 failed attempts in a short window."""
+        import time
+        from io import StringIO
+
+        from src.ui.tray_manager import TrayManager
+
+        manager = TrayManager()
+        manager._running = True
+
+        # Simulate 3 prior rapid respawns (within the 60s window).
+        manager._respawn_count = 3
+        manager._last_respawn_time = time.monotonic()
+
+        mock_stdout = StringIO("")  # EOF immediately
+        mock_process = mock.Mock()
+        mock_process.stdout = mock_stdout
+        mock_process.poll = mock.Mock(return_value=1)
+        manager._process = mock_process
+
+        with mock.patch.object(manager, "start", return_value=True) as mock_start:
+            manager._read_stdout()
+
+        # Circuit breaker engaged: no further respawn attempts.
+        mock_start.assert_not_called()
+        # State flag set so callers/UI can observe "tray is down".
+        assert manager._tray_down is True
+
+    def test_no_respawn_during_shutdown(self, mock_gtk_modules):
+        """When ``_shutting_down`` is True, the EOF path must NOT respawn."""
+        from io import StringIO
+
+        from src.ui.tray_manager import TrayManager
+
+        manager = TrayManager()
+        manager._running = True
+        manager._shutting_down = True  # Concurrent stop() in progress
+
+        mock_stdout = StringIO("")  # EOF immediately
+        mock_process = mock.Mock()
+        mock_process.stdout = mock_stdout
+        mock_process.poll = mock.Mock(return_value=0)  # Clean exit during shutdown
+        manager._process = mock_process
+
+        with mock.patch.object(manager, "start", return_value=True) as mock_start:
+            manager._read_stdout()
+
+        mock_start.assert_not_called()
+
+    def test_respawn_count_resets_after_60_seconds(self, mock_gtk_modules):
+        """Respawn count window is 60s — older respawns shouldn't trip the breaker."""
+        import time
+        from io import StringIO
+
+        from src.ui.tray_manager import TrayManager
+
+        manager = TrayManager()
+        manager._running = True
+
+        # Simulate 3 prior respawns, but more than 60 seconds ago.
+        manager._respawn_count = 3
+        manager._last_respawn_time = time.monotonic() - 120.0  # 2 minutes ago
+
+        mock_stdout = StringIO("")
+        mock_process = mock.Mock()
+        mock_process.stdout = mock_stdout
+        mock_process.poll = mock.Mock(return_value=1)
+        manager._process = mock_process
+
+        with mock.patch.object(manager, "start", return_value=True) as mock_start:
+            manager._read_stdout()
+
+        # Window expired — respawn should be allowed again.
+        mock_start.assert_called()
+
+    def test_init_initializes_respawn_state(self, mock_gtk_modules):
+        """``__init__`` must initialize the new respawn / shutdown state fields."""
+        from src.ui.tray_manager import TrayManager
+
+        manager = TrayManager()
+
+        assert manager._shutting_down is False
+        assert manager._respawn_count == 0
+        assert manager._last_respawn_time == 0.0
+        assert manager._tray_down is False
+
+
 class TestTrayManagerReaderThreadIntegration:
     """Integration tests for reader thread behavior."""
 
@@ -1443,6 +1597,7 @@ class TestTrayManagerReaderThreadIntegration:
 
         manager = TrayManager()
         manager._running = True
+        manager._shutting_down = True  # Suppress UI-001 respawn path on EOF
 
         # Set up callbacks to track calls
         quick_scan_called = []
@@ -1473,6 +1628,7 @@ class TestTrayManagerReaderThreadIntegration:
 
         manager = TrayManager()
         manager._running = True
+        manager._shutting_down = True  # Suppress UI-001 respawn path on EOF
 
         messages = [
             "invalid json\n",  # Invalid

@@ -628,6 +628,116 @@ class TestSchedulerCronIntegration:
         assert entry == "30 14 * * 3"
 
 
+class TestSchedulerCronMarkerSubstring:
+    """Regression tests for BUG-004 — substring-match crontab marker.
+
+    Prior behavior used ``self.CRON_MARKER in line`` which silently dropped
+    any user crontab line that merely contained the marker as a substring,
+    plus the next user line. These tests pin the anchored-equality behavior
+    plus the next-line safety check.
+    """
+
+    @pytest.fixture
+    def scheduler(self):
+        """Create a Scheduler with cron backend forced (no real cron needed)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sched = Scheduler(config_dir=Path(tmpdir))
+            sched._backend = SchedulerBackend.CRON
+            yield sched
+
+    def _run_disable_with_crontab(self, scheduler, crontab_content):
+        """Helper: run _disable_cron_schedule with a fake `crontab -l` output.
+
+        Returns the new crontab content that would have been written, by
+        capturing the `input=` kwarg of the second subprocess.run call.
+        """
+        captured = {"new_crontab": None}
+
+        def fake_run(cmd, *args, **kwargs):
+            # First call is `crontab -l`, second is `crontab -` (write).
+            cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+            if "-l" in cmd_str:
+                return mock.MagicMock(returncode=0, stdout=crontab_content, stderr="")
+            elif kwargs.get("input") is not None:
+                captured["new_crontab"] = kwargs["input"]
+                return mock.MagicMock(returncode=0, stdout="", stderr="")
+            else:
+                # `crontab -r` (remove all)
+                captured["new_crontab"] = ""
+                return mock.MagicMock(returncode=0, stdout="", stderr="")
+
+        with mock.patch("src.core.scheduler.subprocess.run", side_effect=fake_run):
+            success, _err = scheduler._disable_cron_schedule()
+
+        return success, captured["new_crontab"]
+
+    def test_disable_does_not_drop_user_line_after_marker_substring(self, scheduler):
+        """A user comment containing the marker as a substring must not consume the next line."""
+        # Choose a comment whose text fully contains the literal marker as a substring.
+        marker = scheduler.CRON_MARKER  # "# ClamUI Scheduled Scan"
+        user_comment = f"{marker} (legacy backup notes — keep below)"
+        user_job = "0 5 * * * /usr/bin/important-user-job"
+        crontab = f"{user_comment}\n{user_job}\n"
+
+        success, new_crontab = self._run_disable_with_crontab(scheduler, crontab)
+
+        assert success is True
+        # The user comment must remain. Even more importantly, the user job
+        # below it must NOT have been silently dropped.
+        assert user_job in new_crontab, (
+            f"User job was silently dropped! new_crontab={new_crontab!r}"
+        )
+        assert user_comment in new_crontab
+
+    def test_disable_anchored_marker_removes_only_clamui_block(self, scheduler):
+        """Exact marker line followed by a clamscan command should remove both."""
+        marker = scheduler.CRON_MARKER  # "# ClamUI Scheduled Scan"
+        clamui_cmd = "0 2 * * * /usr/bin/clamui-scheduled-scan --target /home"
+        user_job = "30 4 * * * /usr/bin/backup.sh"
+        crontab = f"{user_job}\n{marker}\n{clamui_cmd}\n"
+
+        success, new_crontab = self._run_disable_with_crontab(scheduler, crontab)
+
+        assert success is True
+        assert marker not in new_crontab
+        assert clamui_cmd not in new_crontab
+        # Unrelated user job must be preserved.
+        assert user_job in new_crontab
+
+    def test_disable_does_not_drop_after_marker_if_next_line_not_clamui(self, scheduler):
+        """Defensive check: marker followed by a non-ClamUI line should NOT drop the next line.
+
+        This is the safety net for the case where the marker exists but the
+        following line was clobbered by a user. We should drop the marker
+        (it's anchored equality) but keep the unrelated user line.
+        """
+        marker = scheduler.CRON_MARKER
+        non_clamui_line = "30 6 * * * /usr/bin/totally-unrelated --user-job"
+        crontab = f"{marker}\n{non_clamui_line}\n"
+
+        success, new_crontab = self._run_disable_with_crontab(scheduler, crontab)
+
+        assert success is True
+        # Marker line itself is removed.
+        assert marker not in new_crontab
+        # User line below the marker must NOT be dropped — it's clearly not
+        # a ClamUI command.
+        assert non_clamui_line in new_crontab
+
+    def test_disable_handles_marker_with_whitespace(self, scheduler):
+        """Anchored equality check uses .strip() so leading/trailing whitespace is tolerated."""
+        marker = scheduler.CRON_MARKER
+        clamui_cmd = "0 2 * * * /usr/bin/clamui-scheduled-scan"
+        # Marker line has trailing whitespace.
+        crontab = f"{marker}   \n{clamui_cmd}\n"
+
+        success, new_crontab = self._run_disable_with_crontab(scheduler, crontab)
+
+        assert success is True
+        assert clamui_cmd not in new_crontab
+        assert marker not in new_crontab
+
+
 class TestGetVenvPaths:
     """Tests for Scheduler._get_venv_paths()."""
 

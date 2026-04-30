@@ -43,6 +43,21 @@ def _validate_target_paths(targets: list[str]) -> str | None:
     return None
 
 
+def _is_clamui_cron_command(line: str) -> bool:
+    """Return True if a crontab line looks like a ClamUI scheduled-scan command.
+
+    Used as a safety check before dropping the line that follows a ClamUI
+    marker line. We intentionally accept any of the known invocations:
+    - ``clamui-scheduled-scan`` entry-point binary (PATH or absolute)
+    - ``-m src.cli.scheduled_scan`` module form (venv fallback)
+    - ``flatpak run --command=clamui-scheduled-scan ...`` Flatpak form
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    return "clamui-scheduled-scan" in stripped or "src.cli.scheduled_scan" in stripped
+
+
 class SchedulerBackend(Enum):
     """Available scheduler backends."""
 
@@ -834,15 +849,28 @@ WantedBy=timers.target
             else:
                 current_crontab = ""
 
-            # Remove any existing ClamUI entries
+            # Remove any existing ClamUI entries.
+            # Use anchored equality (with .strip()) to avoid dropping user
+            # lines that merely contain the marker text as a substring.
+            # Also verify the following line actually looks like a ClamUI
+            # cron command before consuming it — defense against a marker
+            # whose paired command was previously edited away by the user.
             lines = current_crontab.splitlines()
             new_lines = []
             skip_next = False
             for line in lines:
                 if skip_next:
                     skip_next = False
+                    if not _is_clamui_cron_command(line):
+                        # Don't drop a user line that doesn't look like ours.
+                        logger.warning(
+                            "ClamUI cron marker found but next line is not a "
+                            "ClamUI command; preserving user line: %r",
+                            line,
+                        )
+                        new_lines.append(line)
                     continue
-                if self.CRON_MARKER in line:
+                if line.strip() == self.CRON_MARKER:
                     skip_next = True  # Skip the marker and the next line
                     continue
                 new_lines.append(line)
@@ -962,15 +990,26 @@ WantedBy=timers.target
             if result.returncode != 0:
                 return (True, None)  # No crontab to modify
 
-            # Remove ClamUI entries
+            # Remove ClamUI entries.
+            # Use anchored equality (with .strip()) to avoid dropping user
+            # lines containing the marker as a substring, and verify the
+            # following line is actually a ClamUI cron command before
+            # consuming it.
             lines = result.stdout.splitlines()
             new_lines = []
             skip_next = False
             for line in lines:
                 if skip_next:
                     skip_next = False
+                    if not _is_clamui_cron_command(line):
+                        logger.warning(
+                            "ClamUI cron marker found but next line is not a "
+                            "ClamUI command; preserving user line: %r",
+                            line,
+                        )
+                        new_lines.append(line)
                     continue
-                if self.CRON_MARKER in line:
+                if line.strip() == self.CRON_MARKER:
                     skip_next = True
                     continue
                 new_lines.append(line)

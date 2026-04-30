@@ -544,6 +544,65 @@ class TestQuarantineManagerPermissions:
         assert entry is not None
         assert entry.original_permissions == 0o700
 
+    def test_restore_strips_setuid_bits_from_destination(self, manager, temp_dir):
+        """Regression for VULN-004: a tampered DB row with setuid/setgid/sticky
+        bits MUST NOT propagate those bits onto a restored file's mode.
+
+        Skipped on filesystems that don't honor setuid bits (e.g. some tmpfs
+        configs and unprivileged sandboxes).
+        """
+        import sqlite3
+        import stat as stat_module
+
+        # Quick capability probe: write a temp file and try to chmod 0o4755.
+        probe = os.path.join(temp_dir, ".setuid_probe")
+        with open(probe, "wb") as f:
+            f.write(b"probe")
+        try:
+            os.chmod(probe, 0o4755)
+            mode = os.stat(probe).st_mode & 0o7777
+            setuid_supported = bool(mode & stat_module.S_ISUID)
+        except OSError:
+            setuid_supported = False
+        finally:
+            if os.path.exists(probe):
+                os.unlink(probe)
+        if not setuid_supported:
+            pytest.skip("filesystem does not honor setuid bits")
+
+        # Create and quarantine a normal file.
+        file_path = os.path.join(temp_dir, "files", "victim.sh")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(b"#!/bin/bash\necho hi")
+        os.chmod(file_path, 0o755)
+
+        qresult = manager.quarantine_file(file_path, "TestThreat")
+        assert qresult.is_success is True
+        entry_id = qresult.entry.id
+
+        # Tamper with the DB to inject high-bit permissions (setuid+setgid+755).
+        db_path = manager._database._db_path
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "UPDATE quarantine SET original_permissions = ? WHERE id = ?",
+                (0o6755, entry_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Restore — masking must strip the high bits.
+        restore_result = manager.restore_file(entry_id)
+        assert restore_result.is_success is True
+
+        restored_mode = os.stat(file_path).st_mode & 0o7777
+        assert restored_mode == 0o755, (
+            f"Restored file mode is {oct(restored_mode)}; setuid/setgid leaked "
+            f"from tampered DB row"
+        )
+
 
 class TestQuarantineManagerDelete:
     """Tests for the QuarantineManager delete operations."""

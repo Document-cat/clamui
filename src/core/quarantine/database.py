@@ -61,6 +61,14 @@ class QuarantineEntry:
         Returns:
             New QuarantineEntry instance
         """
+        # VULN-004: defense-in-depth — mask permission bits read from DB to
+        # the low 9 bits (rwx for user/group/other). Prevents setuid/setgid/
+        # sticky bits from propagating out of a tampered or corrupted DB row.
+        raw_perms = row[7] if len(row) > 7 else None
+        if raw_perms is None:
+            masked_perms = 0o644
+        else:
+            masked_perms = raw_perms & 0o777
         return cls(
             id=row[0],
             original_path=row[1],
@@ -69,7 +77,7 @@ class QuarantineEntry:
             detection_date=row[4],
             file_size=row[5],
             file_hash=row[6],
-            original_permissions=row[7] if len(row) > 7 else 0o644,
+            original_permissions=masked_perms,
         )
 
 
@@ -302,6 +310,10 @@ class QuarantineDatabase:
         Returns:
             The ID of the newly created entry, or None if failed
         """
+        # VULN-004: defense-in-depth — mask permission bits before insert so
+        # the DB only ever stores the low 9 bits (rwx user/group/other).
+        # Prevents accidental or malicious propagation of setuid/setgid/sticky.
+        original_permissions = original_permissions & 0o777
         with self._lock:
             try:
                 with self._get_connection() as conn:
