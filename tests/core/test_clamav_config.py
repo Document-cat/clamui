@@ -1007,11 +1007,12 @@ class TestWriteConfigsWithElevation:
         assert len(run_calls) == 1
 
         cmd, kwargs = run_calls[0]
-        assert cmd[0:2] == ["pkexec", "/usr/bin/clamui-apply-preferences"]
-        # Two (temp, destination) pairs for two configs
-        assert len(cmd[2:]) == 4
-        assert str(config_a.file_path) in cmd[3::2]
-        assert str(config_b.file_path) in cmd[3::2]
+        assert cmd[0:3] == ["pkexec", "/usr/bin/clamui-apply-preferences", "--protocol=2"]
+        # Two (staged-source, destination) pairs after the protocol token.
+        assert len(cmd[3:]) == 4
+        # Destinations are at odd offsets within the pair list, i.e. cmd[4::2].
+        assert str(config_a.file_path) in cmd[4::2]
+        assert str(config_b.file_path) in cmd[4::2]
         assert kwargs["capture_output"] is True
         assert kwargs["text"] is True
 
@@ -1345,8 +1346,16 @@ class TestWriteConfigsFlatpak:
         assert cmd[1] == "--host"
         assert cmd[2] == "pkexec"
 
-    def test_flatpak_elevated_write_skips_helper_binary(self, monkeypatch):
-        """Test that Flatpak uses shell fallback, not sandbox-local helper."""
+    def test_flatpak_elevated_write_uses_helper_with_protocol(self, monkeypatch):
+        """In Flatpak the helper is invoked through flatpak-spawn (no inline shell).
+
+        VULN-001 was the inline ``pkexec sh -c ...`` fallback that ran in the
+        Flatpak path: it copied any source path to any destination with no
+        allowlist.  After the fix the helper is the only writer and is
+        responsible for validating both the source (under per-user staging)
+        and the destination (against the allowlist).  Packaging-side work is
+        responsible for making the helper reachable from the host.
+        """
         config = ClamAVConfig(file_path=Path("/etc/clamav/clamd.conf"))
         config.set_value("LogVerbose", "yes")
 
@@ -1355,7 +1364,7 @@ class TestWriteConfigsFlatpak:
         monkeypatch.setattr(
             clamav_config_module,
             "_get_privileged_writer_path",
-            lambda: "/app/bin/clamui-apply-preferences",
+            lambda: "/usr/bin/clamui-apply-preferences",
         )
 
         run_calls = []
@@ -1371,15 +1380,17 @@ class TestWriteConfigsFlatpak:
 
         monkeypatch.setattr(clamav_config_module.subprocess, "run", _fake_run)
 
-        success, _ = write_configs_with_elevation([config])
+        success, _err = write_configs_with_elevation([config])
 
         assert success is True
         cmd = run_calls[0]
-        # Should NOT use the helper binary (it's inside the sandbox)
-        assert "/app/bin/clamui-apply-preferences" not in cmd
-        # Should use sh -c with inline script
-        assert "sh" in cmd
-        assert "-c" in cmd
+        assert cmd[0:2] == ["flatpak-spawn", "--host"]
+        assert cmd[2] == "pkexec"
+        assert cmd[3] == "/usr/bin/clamui-apply-preferences"
+        assert cmd[4] == "--protocol=2"
+        # Inline shell is gone; the helper is the only writer.
+        assert "sh" not in cmd
+        assert "-c" not in cmd
 
     def test_native_elevated_write_no_host_spawn(self, monkeypatch):
         """Test that native (non-Flatpak) writes don't use flatpak-spawn."""
@@ -1414,22 +1425,48 @@ class TestWriteConfigsFlatpak:
         assert cmd[0] == "pkexec"
         assert "flatpak-spawn" not in cmd
 
-    def test_flatpak_temp_files_use_host_visible_dir(self, monkeypatch, tmp_path):
-        """Test that Flatpak temp files are placed in host-visible directory."""
+    def test_staged_files_live_under_per_invocation_staging_dir(self, monkeypatch, tmp_path):
+        """Each invocation stages into a fresh per-user, mode-0o700 directory.
+
+        The staging dir is rooted under ``/run/user/<uid>``, with
+        ``XDG_RUNTIME_DIR`` and ``XDG_CACHE_HOME`` as fallbacks.  We
+        force the cache fallback by hiding ``/run/user`` and
+        ``XDG_RUNTIME_DIR`` so the test can observe the staged path
+        and confirm it is mode 0o700.
+        """
         config = ClamAVConfig(file_path=Path("/etc/clamav/clamd.conf"))
         config.set_value("LogVerbose", "yes")
 
         monkeypatch.setattr(clamav_config_module, "_path_needs_elevation", lambda _: True)
         monkeypatch.setattr(clamav_config_module, "_running_in_flatpak", lambda: True)
+        monkeypatch.setattr(
+            clamav_config_module,
+            "_get_privileged_writer_path",
+            lambda: "/usr/bin/clamui-apply-preferences",
+        )
+        # Force the XDG_CACHE_HOME fallback so the test does not depend on
+        # /run/user/<uid> existing inside the test runner.
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+        monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+        # Pretend /run/user/<uid> is missing so we fall through to XDG_CACHE_HOME.
+        real_is_dir = Path.is_dir
 
-        temp_paths_seen = []
+        def _is_dir(self):
+            if str(self).startswith("/run/user/"):
+                return False
+            return real_is_dir(self)
+
+        monkeypatch.setattr(Path, "is_dir", _is_dir)
+
+        staged_paths: list[str] = []
 
         def _fake_run(cmd, **kwargs):
-            # Extract temp file paths from command args
+            # The first staged-source argument is at index 4 (after
+            # pkexec, helper, --protocol=2, with optional flatpak-spawn
+            # --host prefix); collect any path under the staging tree.
             for arg in cmd:
-                if str(tmp_path) in str(arg) and arg.endswith(".conf"):
-                    temp_paths_seen.append(arg)
+                if str(tmp_path) in str(arg) and str(arg).endswith(".conf"):
+                    staged_paths.append(arg)
 
             class _Result:
                 returncode = 0
@@ -1439,11 +1476,16 @@ class TestWriteConfigsFlatpak:
 
         monkeypatch.setattr(clamav_config_module.subprocess, "run", _fake_run)
 
-        write_configs_with_elevation([config])
+        success, _err = write_configs_with_elevation([config])
 
-        # Temp file should be in the XDG_CACHE_HOME-based directory
-        assert len(temp_paths_seen) == 1
-        assert str(tmp_path) in temp_paths_seen[0]
+        assert success is True
+        assert len(staged_paths) == 1
+        staged = Path(staged_paths[0])
+        assert str(tmp_path) in str(staged)
+        # Even though _fake_run does not actually consume the file, the
+        # staging-dir cleanup in the finally block runs after subprocess.run
+        # returns; the staged file should already be removed by now.
+        assert not staged.exists()
 
 
 class TestBackupConfigFlatpak:

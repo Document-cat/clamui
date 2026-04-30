@@ -10,10 +10,12 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+from .i18n import _
 
 logger = logging.getLogger(__name__)
 
@@ -257,12 +259,12 @@ class ClamAVConfig:
         line_updates: dict[int, str] = {}
         value_indices: dict[str, int] = {}
 
-        for key, _ in self.values.items():
+        for key in self.values:
             value_indices[key] = 0
 
         # First pass: identify which lines need updating based on parsed values
         for key, value_list in self.values.items():
-            for _, config_value in enumerate(value_list):
+            for _i, config_value in enumerate(value_list):
                 if config_value.line_number > 0:
                     # This value has a known line number - update that line
                     if config_value.value:
@@ -925,50 +927,85 @@ def _get_privileged_writer_path() -> str | None:
     return shutil.which(helper_name)
 
 
-def _get_host_visible_tmpdir() -> str | None:
+def _make_staging_dir() -> Path:
     """
-    Return a temp directory visible from the host when running in Flatpak.
+    Create a per-invocation staging directory with mode 0o700.
 
-    Flatpak sandboxes have their own /tmp that is invisible to
-    ``flatpak-spawn --host`` processes.  XDG_CACHE_HOME maps to
-    ``~/.var/app/<app-id>/cache/`` which lives on the host filesystem.
+    Preference order so the staging path is always reachable from the
+    privileged helper running on the host:
+
+    1. ``/run/user/<uid>/clamui-staging/<uuid>`` -- tmpfs, host-visible,
+       cleaned on logout, the canonical XDG runtime location.
+    2. ``$XDG_RUNTIME_DIR/clamui-staging/<uuid>`` -- whatever the session
+       manager exposes if ``/run/user`` is missing.
+    3. ``$XDG_CACHE_HOME/clamui-staging/<uuid>`` -- final fallback for
+       minimal containers without a runtime dir; survives reboot but is
+       under ``$HOME`` which is host-visible from Flatpak via
+       ``~/.var/app/<app-id>/cache/``.
 
     Returns:
-        A host-visible temp directory path, or None outside Flatpak.
-    """
-    if not _running_in_flatpak():
-        return None
+        Newly-created staging directory path with mode 0o700.
 
-    cache_dir = os.environ.get("XDG_CACHE_HOME")
-    if cache_dir:
-        tmp_dir = Path(cache_dir) / "clamui-tmp"
+    Raises:
+        OSError: If no candidate directory could be created.
+    """
+    uid = os.getuid()
+    candidates: list[Path] = []
+
+    run_user = Path(f"/run/user/{uid}")
+    if run_user.is_dir():
+        candidates.append(run_user / "clamui-staging")
+
+    xdg_runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if xdg_runtime:
+        candidates.append(Path(xdg_runtime) / "clamui-staging")
+
+    xdg_cache = os.environ.get("XDG_CACHE_HOME")
+    if xdg_cache:
+        candidates.append(Path(xdg_cache) / "clamui-staging")
+    else:
+        candidates.append(Path.home() / ".cache" / "clamui-staging")
+
+    last_err: OSError | None = None
+    for parent in candidates:
         try:
-            tmp_dir.mkdir(parents=True, exist_ok=True)
-            return str(tmp_dir)
-        except OSError:
-            pass
-    return None
+            parent.mkdir(parents=True, exist_ok=True)
+            os.chmod(parent, 0o700)
+            staging = parent / uuid.uuid4().hex
+            staging.mkdir(mode=0o700)
+            os.chmod(staging, 0o700)
+            return staging
+        except OSError as exc:
+            last_err = exc
+            continue
+
+    if last_err is not None:
+        raise last_err
+    raise OSError("No staging directory candidate could be created")
 
 
 def write_configs_with_elevation(configs: list[ClamAVConfig]) -> tuple[bool, str | None]:
     """
     Write one or more configuration files, requesting elevation at most once.
 
-    Automatically detects whether each file needs privilege elevation:
-    - User-writable paths (e.g., ~/.config/clamav/ in Flatpak): write directly
-    - System paths (e.g., /etc/clamav/): write via a single pkexec invocation
+    User-writable paths are written directly.  System paths are staged into
+    a per-user, mode-``0o700`` directory under ``/run/user/<uid>`` (or an
+    ``XDG_RUNTIME_DIR`` / ``XDG_CACHE_HOME`` fallback) and handed to the
+    privileged helper via a single ``pkexec`` invocation.
 
-    In Flatpak, pkexec is invoked on the host via ``flatpak-spawn --host``
-    because setuid binaries cannot escalate privileges inside the sandbox.
-    Temp files are placed in XDG_CACHE_HOME so they are visible from the host.
+    The helper is required: there is no inline-shell fallback.  If the
+    helper is not installed on the host we surface a clear error rather
+    than silently running an unvalidated ``pkexec sh -c`` script (the
+    behaviour that was VULN-001).
 
     Args:
-        configs: Configuration objects to write
+        configs: Configuration objects to write.
 
     Returns:
-        Tuple of (success, error_message):
-        - (True, None) on success
-        - (False, error_message) on failure
+        Tuple of ``(success, error_message)``:
+
+        - ``(True, None)`` on success.
+        - ``(False, error_message)`` on failure.
     """
     if not configs:
         return (True, None)
@@ -996,86 +1033,79 @@ def write_configs_with_elevation(configs: list[ClamAVConfig]) -> tuple[bool, str
         if not elevated_writes:
             return (True, None)
 
-        # In Flatpak, sandbox /tmp is invisible to host processes.
-        # Use a host-visible cache directory for temp files instead.
-        tmpdir = _get_host_visible_tmpdir()
+        helper_path = _get_privileged_writer_path()
+        if helper_path is None:
+            return (
+                False,
+                _(
+                    "ClamUI privileged helper not installed. Install the 'clamui' "
+                    "package on your host system to apply settings."
+                ),
+            )
 
-        temp_paths: list[str] = []
+        staging_dir: Path | None = None
         try:
-            script_args: list[str] = []
+            staging_dir = _make_staging_dir()
+            flat_pairs: list[str] = []
             for file_path, content in elevated_writes:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    suffix=".conf",
-                    delete=False,
-                    encoding="utf-8",
-                    dir=tmpdir,
-                ) as tmp:
-                    tmp.write(content)
-                    tmp_path = tmp.name
-                temp_paths.append(tmp_path)
-                script_args.extend([tmp_path, str(file_path)])
+                staged_name = f"{uuid.uuid4().hex}.conf"
+                staged_path = staging_dir / staged_name
+                # Write with mode 0o600 so the helper's source-mode check
+                # (``mode & 0o022 == 0``) accepts it.
+                fd = os.open(
+                    str(staged_path),
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                )
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(content)
+                os.chmod(staged_path, 0o600)
+                flat_pairs.extend([str(staged_path), str(file_path)])
 
-            # In Flatpak, pkexec must run on the host via flatpak-spawn
-            # because setuid binaries can't escalate inside the sandbox.
             use_host_spawn = _running_in_flatpak()
             prefix = ["flatpak-spawn", "--host"] if use_host_spawn else []
 
-            helper_path = _get_privileged_writer_path()
-            if helper_path and not use_host_spawn:
-                # Preferred path: dedicated helper keeps pkexec prompt
-                # concise and readable.  Not used in Flatpak because
-                # the helper binary is inside the sandbox and not
-                # accessible from the host.
-                result = subprocess.run(
-                    [*prefix, "pkexec", helper_path, *script_args],
-                    capture_output=True,
-                    text=True,
-                )
-            else:
-                # Fallback (always used in Flatpak): inline shell script
-                # that copies staged files and sets permissions.
-                script = """
-set -e
-while [ "$#" -gt 0 ]; do
-    src="$1"
-    dst="$2"
-    cp "$src" "$dst"
-    chmod 644 "$dst"
-    shift 2
-done
-"""
-                result = subprocess.run(
-                    [*prefix, "pkexec", "sh", "-c", script, "clamui-config-write", *script_args],
-                    capture_output=True,
-                    text=True,
-                )
+            argv = [*prefix, "pkexec", helper_path, "--protocol=2", *flat_pairs]
+            result = subprocess.run(argv, capture_output=True, text=True, check=False)
 
             if result.returncode != 0:
                 if result.returncode == 126:
                     return (
                         False,
-                        "Authentication was canceled. Configuration changes were not applied.",
+                        _("Authentication was canceled. Configuration changes were not applied."),
                     )
                 if result.returncode == 127:
                     return (
                         False,
-                        "Authorization failed. Administrator permission is required to apply these changes.",
+                        _(
+                            "Authorization failed. Administrator permission is "
+                            "required to apply these changes."
+                        ),
                     )
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                if result.returncode == 3:
+                    return (
+                        False,
+                        _(
+                            "Privileged helper rejected the request: missing "
+                            "PKEXEC_UID. The polkit policy may be misconfigured."
+                        ),
+                    )
+                if result.returncode == 4:
+                    return (
+                        False,
+                        _(
+                            "Privileged helper rejected the request: protocol "
+                            "mismatch. Update the 'clamui' package on the host."
+                        ),
+                    )
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
                 return (False, f"Failed to write config: {error_msg}")
 
             return (True, None)
 
         finally:
-            # Clean up temp files
-            for tmp_path in temp_paths:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    logger.debug(
-                        "Failed to remove temporary config file %s", tmp_path, exc_info=True
-                    )
+            if staging_dir is not None:
+                shutil.rmtree(staging_dir, ignore_errors=True)
 
     except FileNotFoundError:
         return (False, "pkexec not found - cannot elevate privileges")
