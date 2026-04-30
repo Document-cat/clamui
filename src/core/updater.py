@@ -425,7 +425,7 @@ class FreshclamUpdater:
             # legacy sandbox database files.
             return None
 
-        success, error, _ = self._backup_local_databases()
+        success, error, _backed_up = self._backup_local_databases()
 
         if not success:
             logger.warning(

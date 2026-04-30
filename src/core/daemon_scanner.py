@@ -468,6 +468,8 @@ class DaemonScanner:
         if file_list_path is not None:
             cmd.extend(["--file-list", file_list_path])
         else:
+            # Use "--" so a path starting with "-" isn't reinterpreted as a flag.
+            cmd.append("--")
             cmd.append(path)
 
         return wrap_host_command(cmd, force_host=True)

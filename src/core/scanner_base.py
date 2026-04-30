@@ -281,7 +281,14 @@ def stream_process_output(
                 # select() returns readable.
                 raw_bytes = os.read(stdout_fd, 4096)
                 if not raw_bytes:
-                    # EOF reached
+                    # EOF reached: stdout closed before process exited.
+                    # Wait for process to exit so the next iteration's
+                    # process.poll() check enters the drain branch above
+                    # instead of spinning on select() over a closed fd.
+                    try:
+                        process.wait(timeout=2.0)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
                     continue
 
                 chunk = raw_bytes.decode("utf-8", errors="replace")

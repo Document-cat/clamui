@@ -20,7 +20,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -427,7 +427,7 @@ class VirusTotalClient:
             scan_date = None
             if scan_timestamp:
                 try:
-                    scan_date = datetime.fromtimestamp(scan_timestamp).isoformat()
+                    scan_date = datetime.fromtimestamp(scan_timestamp, tz=UTC).isoformat()
                 except (ValueError, OSError) as e:
                     logger.debug("Invalid scan timestamp in VT response: %s", e)
 

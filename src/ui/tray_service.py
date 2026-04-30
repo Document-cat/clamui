@@ -327,6 +327,23 @@ class TrayService:
         full_scan.connect("item-activated", self._on_menu_full_scan)
         self._menu_root.child_append(full_scan)
 
+        # Scan with profile submenu (one entry per configured profile)
+        if self._profiles:
+            profile_root = Dbusmenu.Menuitem.new_with_id(item_id)
+            item_id += 1
+            profile_root.property_set(Dbusmenu.MENUITEM_PROP_LABEL, _("Scan with profile"))
+            self._menu_root.child_append(profile_root)
+            for profile in self._profiles:
+                profile_id = profile.get("id")
+                profile_name = profile.get("name", "")
+                if not profile_id or not profile_name:
+                    continue
+                entry = Dbusmenu.Menuitem.new_with_id(item_id)
+                item_id += 1
+                entry.property_set(Dbusmenu.MENUITEM_PROP_LABEL, profile_name)
+                entry.connect("item-activated", self._on_menu_select_profile, profile_id)
+                profile_root.child_append(entry)
+
         # Separator
         sep2 = Dbusmenu.Menuitem.new_with_id(item_id)
         item_id += 1
@@ -365,6 +382,12 @@ class TrayService:
     def _on_menu_full_scan(self, menuitem, timestamp):
         """Handle full scan menu item activation."""
         self._send_action("full_scan")
+
+    def _on_menu_select_profile(self, menuitem, timestamp, profile_id):
+        """Handle profile selection menu item activation."""
+        self._send_message(
+            {"event": "menu_action", "action": "select_profile", "profile_id": profile_id}
+        )
 
     def _on_menu_update(self, menuitem, timestamp):
         """Handle update definitions menu item activation."""
@@ -655,6 +678,10 @@ class TrayService:
         if current_profile_id is not None:
             self._current_profile_id = current_profile_id
         logger.debug(f"Updated profiles: {len(profiles)} profiles")
+        # Schedule menu rebuild on the main thread so the new profiles
+        # appear in the tray submenu. update_profiles can be invoked from
+        # the IPC reader thread, so use idle_add for thread safety.
+        GLib.idle_add(self._rebuild_menu)
 
     def handle_command(self, command: dict) -> None:
         """Handle a command from the main application."""

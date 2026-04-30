@@ -797,7 +797,9 @@ class Scanner:
                 regex = glob_to_regex(pattern)
                 cmd.extend(["--exclude", regex])
 
-        # Add the path to scan
+        # Add the path to scan. Use "--" so a filename starting with "-"
+        # is not reinterpreted as a clamscan flag.
+        cmd.append("--")
         cmd.append(path)
 
         # Wrap with flatpak-spawn if running inside Flatpak sandbox
